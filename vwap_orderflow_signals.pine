@@ -7,7 +7,6 @@ indicator("VWAP Orderflow Buy/Sell Signals", overlay=true)
 cvdLength       = input.int(20, "CVD SMA Length", minval=1)
 useVolume       = input.bool(true, "Use Volume in CVD")
 showVWAP        = input.bool(true, "Show VWAP Line")
-signalSize      = input.string("large", "Signal Size", options=["tiny", "small", "normal", "large", "huge"])
 
 // ----------------------------
 // VWAP
@@ -43,17 +42,6 @@ buySignal  = vwapCrossUp and cvdBullish and bullishCandle
 sellSignal = vwapCrossDown and cvdBearish and bearishCandle
 
 // ----------------------------
-// Convert size string to size type
-// ----------------------------
-labelSize = switch signalSize
-    "tiny"   => size.tiny
-    "small"  => size.small
-    "normal" => size.normal
-    "large"  => size.large
-    "huge"   => size.huge
-    => size.large
-
-// ----------------------------
 // Plot VWAP
 // ----------------------------
 plot(showVWAP ? vwapLine : na, "VWAP", color=color.yellow, linewidth=2)
@@ -68,7 +56,7 @@ plotshape(
      color = color.green,
      textcolor = color.white,
      text = "BUY",
-     size = labelSize,
+     size = size.large,
      location = location.belowbar)
 
 plotshape(
@@ -78,7 +66,7 @@ plotshape(
      color = color.red,
      textcolor = color.white,
      text = "SELL",
-     size = labelSize,
+     size = size.large,
      location = location.abovebar)
 
 // ----------------------------
