@@ -1,0 +1,211 @@
+//@version=5
+indicator("VWAP Orderflow Buy/Sell Signals", overlay=true)
+
+// ----------------------------
+// Inputs
+// ----------------------------
+cvdLength       = input.int(20, "CVD SMA Length", minval=1)
+useVolume       = input.bool(true, "Use Volume in CVD")
+showVWAP        = input.bool(true, "Show VWAP Line")
+
+// NEW: Signal sensitivity inputs
+lookbackBars    = input.int(3, "Lookback Bars for Cross", minval=1, maxval=10, tooltip="Number of bars to look back for VWAP cross")
+useEMAFilter    = input.bool(true, "Use EMA Trend Filter")
+emaLength       = input.int(50, "EMA Length", minval=1)
+useRSIFilter    = input.bool(true, "Use RSI Filter")
+rsiLength       = input.int(14, "RSI Length", minval=1)
+rsiOverbought   = input.int(70, "RSI Overbought", minval=50, maxval=100)
+rsiOversold     = input.int(30, "RSI Oversold", minval=0, maxval=50)
+useVolumeFilter = input.bool(true, "Use Volume Filter")
+volMultiplier   = input.float(0.8, "Volume Multiplier", minval=0.1, maxval=3.0, tooltip="Minimum volume relative to average")
+showWeakSignals = input.bool(true, "Show Weak Signals", tooltip="Show signals with fewer confirmations")
+
+// ----------------------------
+// VWAP
+// ----------------------------
+vwapLine = ta.vwap(close)
+
+// ----------------------------
+// EMA Trend Filter
+// ----------------------------
+emaLine = ta.ema(close, emaLength)
+bullishTrend = close > emaLine
+bearishTrend = close < emaLine
+
+// ----------------------------
+// RSI
+// ----------------------------
+rsiValue = ta.rsi(close, rsiLength)
+rsiNotOverbought = rsiValue < rsiOverbought
+rsiNotOversold = rsiValue > rsiOversold
+
+// ----------------------------
+// Volume Filter
+// ----------------------------
+avgVolume = ta.sma(volume, 20)
+volumeOK = volume > avgVolume * volMultiplier
+
+// ----------------------------
+// Improved CVD Calculation
+// ----------------------------
+// Volume-weighted delta for better order flow approximation
+candleRange = high - low
+deltaRaw = candleRange > 0 ? (close - open) / candleRange : 0
+delta = useVolume ? deltaRaw * volume : (close - open)
+
+// Use rolling sum instead of unbounded cumulative
+cvd = math.sum(delta, cvdLength)
+cvdSMA = ta.sma(cvd, cvdLength)
+
+// ----------------------------
+// Signal Conditions with Lookback
+// ----------------------------
+// Check if VWAP cross happened within lookback period
+vwapCrossUp   = ta.crossover(close, vwapLine)
+vwapCrossDown = ta.crossunder(close, vwapLine)
+
+// Multi-bar lookback for crosses (catches more signals)
+recentCrossUp   = ta.barssince(vwapCrossUp) <= lookbackBars
+recentCrossDown = ta.barssince(vwapCrossDown) <= lookbackBars
+
+// Price position relative to VWAP (more flexible than requiring exact cross)
+priceAboveVWAP = close > vwapLine
+priceBelowVWAP = close < vwapLine
+
+// Candle direction
+bullishCandle = close > open
+bearishCandle = close < open
+
+// CVD conditions
+cvdBullish    = cvd > cvdSMA
+cvdBearish    = cvd < cvdSMA
+
+// CVD momentum (additional confirmation)
+cvdRising  = cvd > cvd[1]
+cvdFalling = cvd < cvd[1]
+
+// ----------------------------
+// Calculate Signal Strength (0-5)
+// ----------------------------
+// Buy signal strength
+buyStrength = 0
+buyStrength := buyStrength + (recentCrossUp or (priceAboveVWAP and not priceAboveVWAP[1]) ? 1 : 0)
+buyStrength := buyStrength + (cvdBullish ? 1 : 0)
+buyStrength := buyStrength + (bullishCandle ? 1 : 0)
+buyStrength := buyStrength + (not useEMAFilter or bullishTrend ? 1 : 0)
+buyStrength := buyStrength + (not useRSIFilter or rsiNotOverbought ? 1 : 0)
+buyStrength := buyStrength + (not useVolumeFilter or volumeOK ? 1 : 0)
+
+// Sell signal strength
+sellStrength = 0
+sellStrength := sellStrength + (recentCrossDown or (priceBelowVWAP and not priceBelowVWAP[1]) ? 1 : 0)
+sellStrength := sellStrength + (cvdBearish ? 1 : 0)
+sellStrength := sellStrength + (bearishCandle ? 1 : 0)
+sellStrength := sellStrength + (not useEMAFilter or bearishTrend ? 1 : 0)
+sellStrength := sellStrength + (not useRSIFilter or rsiNotOversold ? 1 : 0)
+sellStrength := sellStrength + (not useVolumeFilter or volumeOK ? 1 : 0)
+
+// ----------------------------
+// Buy/Sell Signals (Improved Logic)
+// ----------------------------
+// Core conditions (minimum requirements)
+coreConditionBuy  = (recentCrossUp or priceAboveVWAP) and cvdBullish
+coreConditionSell = (recentCrossDown or priceBelowVWAP) and cvdBearish
+
+// Apply filters
+emaFilterBuy  = not useEMAFilter or bullishTrend
+emaFilterSell = not useEMAFilter or bearishTrend
+rsiFilterBuy  = not useRSIFilter or rsiNotOverbought
+rsiFilterSell = not useRSIFilter or rsiNotOversold
+volFilter     = not useVolumeFilter or volumeOK
+
+// Strong signals (4+ confirmations including candle direction)
+strongBuySignal  = coreConditionBuy and bullishCandle and emaFilterBuy and rsiFilterBuy and volFilter and buyStrength >= 4
+strongSellSignal = coreConditionSell and bearishCandle and emaFilterSell and rsiFilterSell and volFilter and sellStrength >= 4
+
+// Weak signals (3 confirmations - shown optionally)
+weakBuySignal  = showWeakSignals and coreConditionBuy and emaFilterBuy and buyStrength >= 3 and buyStrength < 4 and not strongBuySignal
+weakSellSignal = showWeakSignals and coreConditionSell and emaFilterSell and sellStrength >= 3 and sellStrength < 4 and not strongSellSignal
+
+// Prevent duplicate signals within lookback period
+var int lastBuyBar = na
+var int lastSellBar = na
+newBuySignal = (strongBuySignal or weakBuySignal) and (na(lastBuyBar) or bar_index - lastBuyBar > lookbackBars)
+newSellSignal = (strongSellSignal or weakSellSignal) and (na(lastSellBar) or bar_index - lastSellBar > lookbackBars)
+
+if newBuySignal
+    lastBuyBar := bar_index
+if newSellSignal
+    lastSellBar := bar_index
+
+// Final signals
+buySignal = newBuySignal and strongBuySignal
+weakBuy = newBuySignal and weakBuySignal
+sellSignal = newSellSignal and strongSellSignal
+weakSell = newSellSignal and weakSellSignal
+
+// ----------------------------
+// Plot EMA
+// ----------------------------
+plot(useEMAFilter ? emaLine : na, "EMA", color=color.blue, linewidth=1)
+
+// ----------------------------
+// Plot VWAP
+// ----------------------------
+plot(showVWAP ? vwapLine : na, "VWAP", color=color.yellow, linewidth=2)
+
+// ----------------------------
+// Plot Buy/Sell Labels (Strong Signals)
+// ----------------------------
+plotshape(
+     buySignal,
+     title = "BUY",
+     style = shape.labelup,
+     color = color.green,
+     textcolor = color.white,
+     text = "BUY",
+     size = size.large,
+     location = location.belowbar)
+
+plotshape(
+     sellSignal,
+     title = "SELL",
+     style = shape.labeldown,
+     color = color.red,
+     textcolor = color.white,
+     text = "SELL",
+     size = size.large,
+     location = location.abovebar)
+
+// ----------------------------
+// Plot Weak Signals (smaller, different color)
+// ----------------------------
+plotshape(
+     weakBuy,
+     title = "WEAK BUY",
+     style = shape.triangleup,
+     color = color.new(color.green, 50),
+     textcolor = color.white,
+     text = "buy",
+     size = size.small,
+     location = location.belowbar)
+
+plotshape(
+     weakSell,
+     title = "WEAK SELL",
+     style = shape.triangledown,
+     color = color.new(color.red, 50),
+     textcolor = color.white,
+     text = "sell",
+     size = size.small,
+     location = location.abovebar)
+
+// ----------------------------
+// Alerts
+// ----------------------------
+alertcondition(buySignal, title="STRONG BUY Alert", message="VWAP + CVD STRONG BUY SIGNAL")
+alertcondition(sellSignal, title="STRONG SELL Alert", message="VWAP + CVD STRONG SELL SIGNAL")
+alertcondition(weakBuy, title="WEAK BUY Alert", message="VWAP + CVD WEAK BUY SIGNAL")
+alertcondition(weakSell, title="WEAK SELL Alert", message="VWAP + CVD WEAK SELL SIGNAL")
+alertcondition(buySignal or weakBuy, title="ANY BUY Alert", message="VWAP + CVD BUY SIGNAL")
+alertcondition(sellSignal or weakSell, title="ANY SELL Alert", message="VWAP + CVD SELL SIGNAL")
