@@ -1,0 +1,2 @@
+# Traidingview
+Tradingview scripts
