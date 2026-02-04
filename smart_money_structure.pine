@@ -1,7 +1,7 @@
-// This Pine Script(TM) v5 indicator source code is subject to the terms of the Mozilla Public License 2.0
+// This Pine Script(TM) v6 indicator source code is subject to the terms of the Mozilla Public License 2.0
 // https://mozilla.org/MPL/2.0/
 
-//@version=5
+//@version=6
 indicator("Smart Money Structure | GainzAlgo", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -142,7 +142,7 @@ trend4H = close > ema4H and close > vwap4H ? 1 : close < ema4H and close < vwap4
 trendD = close > emaD and close > vwapD ? 1 : close < emaD and close < vwapD ? -1 : 0
 
 trend_strength_raw = trend1M + trend5M + trend15M + trend30M + trend1H + trend4H + trendD
-trend_strength = (trend_strength_raw / 7) * 100
+trend_strength = (trend_strength_raw / 7.0) * 100
 
 var float system_confidence = 50.0
 abs_strength = math.abs(trend_strength_raw)
