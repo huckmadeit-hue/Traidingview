@@ -1,0 +1,334 @@
+//@version=6
+indicator("VWAP Smart Money Confluence Engine [Footprint IQ Companion]", overlay=true, max_labels_count=500, max_boxes_count=300, max_lines_count=300)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// INPUTS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GRP_VWAP  = "VWAP"
+GRP_SMC   = "Order Blocks / Liquidity"
+GRP_REG   = "Regime & Filters"
+GRP_PLAN  = "Scoring & Trade Plans"
+GRP_UI    = "Display"
+
+showVWAP       = input.bool(true,  "Show Session VWAP",         group=GRP_VWAP)
+showBands      = input.bool(true,  "Show VWAP Bands",           group=GRP_VWAP)
+showWeeklyVWAP = input.bool(true,  "Show Weekly VWAP",          group=GRP_VWAP)
+showAnchorVWAP = input.bool(false, "Show Manual Anchored VWAP", group=GRP_VWAP)
+anchorTime     = input.time(timestamp("2026-01-01T09:30:00"), "Manual Anchor Time", group=GRP_VWAP, tooltip="If the anchor is earlier than the first loaded bar, the anchored VWAP starts from the first bar of the chart.")
+bandLen        = input.int(50,    "VWAP Band Deviation Length", minval=10, group=GRP_VWAP)
+bandMult1      = input.float(1.0, "VWAP Band 1 Multiplier", step=0.1,  group=GRP_VWAP)
+bandMult2      = input.float(2.0, "VWAP Band 2 Multiplier", step=0.1,  group=GRP_VWAP)
+slopeLen       = input.int(5,     "VWAP Slope Lookback",  minval=1,    group=GRP_VWAP)
+
+showOB          = input.bool(true, "Show Order Blocks",     group=GRP_SMC)
+showSweeps      = input.bool(true, "Show Liquidity Sweeps", group=GRP_SMC)
+showTraps       = input.bool(true, "Show Trap Zones",       group=GRP_SMC)
+swingLen        = input.int(5,    "Swing Lookback", minval=2, group=GRP_SMC)
+obMinScore      = input.int(70,   "Minimum Order Block Score", minval=0, maxval=100, group=GRP_SMC)
+maxBoxes        = input.int(30,   "Max Active Order Blocks", minval=5, maxval=100, group=GRP_SMC)
+obBoxExtend     = input.int(40,   "Order Block Box Extension (bars)", minval=1, group=GRP_SMC)
+obRecentBars    = input.int(20,   "Recent Order Block Window (bars)", minval=1, group=GRP_SMC)
+dispRangeMult   = input.float(0.8, "Displacement Range x ATR", step=0.05, group=GRP_SMC)
+dispVolMult     = input.float(1.1, "Displacement Min RelVol",  step=0.05, group=GRP_SMC)
+strongRangeMult = input.float(1.2, "Strong OB Range x ATR",    step=0.05, group=GRP_SMC)
+strongVolMult   = input.float(1.5, "Strong OB RelVol",         step=0.05, group=GRP_SMC)
+trapMinRelVol   = input.float(1.0, "Trap Zone Min RelVol",     step=0.05, group=GRP_SMC)
+
+atrLen       = input.int(14, "ATR Length", minval=1, group=GRP_REG)
+volLen       = input.int(20, "Relative Volume Length", minval=1, group=GRP_REG)
+htfTf        = input.timeframe("60", "Higher Timeframe", group=GRP_REG, tooltip="Should be higher than the chart timeframe. The dashboard flags it when it is not.")
+htfEmaLen    = input.int(50, "HTF EMA Length", minval=1, group=GRP_REG)
+chopCrossLen = input.int(20, "Chop: VWAP Cross Window (bars)", minval=1, group=GRP_REG)
+chopCrossMin = input.int(4,  "Chop: Min VWAP Crosses", minval=1, group=GRP_REG)
+vwapFlatMult = input.float(0.15, "Chop: Flat VWAP Slope x ATR", step=0.01, group=GRP_REG)
+
+showPlans      = input.bool(true, "Show Trade Plans", group=GRP_PLAN)
+scoreThreshold = input.int(80, "A+ Setup Score Threshold", minval=50, maxval=100, group=GRP_PLAN)
+atrStopMult    = input.float(0.35, "ATR Stop Buffer", step=0.05, group=GRP_PLAN)
+scoreMinRelVol = input.float(1.1,  "Score: Min RelVol", step=0.05, group=GRP_PLAN)
+
+showDashboard = input.bool(true, "Show Dashboard", group=GRP_UI)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// CONSTANTS / COLORS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ATR_MA_LEN = 20
+
+COL_BAND_UP1       = color.new(color.green, 45)
+COL_BAND_DN1       = color.new(color.red, 45)
+COL_BAND_UP2       = color.new(color.green, 70)
+COL_BAND_DN2       = color.new(color.red, 70)
+COL_BULL_OB_BG     = color.new(color.green, 84)
+COL_BULL_OB_BORDER = color.new(color.green, 10)
+COL_BEAR_OB_BG     = color.new(color.red, 84)
+COL_BEAR_OB_BORDER = color.new(color.red, 10)
+COL_BG_CHOP        = color.new(color.gray, 88)
+COL_BG_BULL        = color.new(color.green, 92)
+COL_BG_BEAR        = color.new(color.red, 92)
+
+LONG_CHECKLIST  = "1. Sellers absorbed\n2. CVD turns up\n3. Buy imbalance stack\n4. Delta fails new low\n5. UA target above"
+SHORT_CHECKLIST = "1. Buyers absorbed\n2. CVD rolls over\n3. Sell imbalance stack\n4. Delta fails new high\n5. UA target below"
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// CORE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+atr    = ta.atr(atrLen)
+atrMA  = ta.sma(atr, ATR_MA_LEN)
+volMA  = ta.sma(volume, volLen)
+relVol = volMA > 0 ? volume / volMA : 1.0
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// VWAP LAYER
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+sessionVWAP = ta.vwap(close)
+dev = ta.stdev(close, bandLen)
+
+upper1 = sessionVWAP + dev * bandMult1
+lower1 = sessionVWAP - dev * bandMult1
+upper2 = sessionVWAP + dev * bandMult2
+lower2 = sessionVWAP - dev * bandMult2
+
+// ta.vwap() must be evaluated inside the security call so it anchors to the
+// weekly period of the requested context. Passing sessionVWAP instead would
+// return the chart's session VWAP sampled weekly and break the weekly anchor.
+weeklyVWAP = request.security(syminfo.tickerid, "W", ta.vwap(close), barmerge.gaps_off, barmerge.lookahead_off)
+
+vwapSlope = sessionVWAP - sessionVWAP[slopeLen]
+aboveVWAP = close > sessionVWAP
+belowVWAP = close < sessionVWAP
+
+bullVWAPReclaim = ta.crossover(close, sessionVWAP)
+bearVWAPReject  = ta.crossunder(close, sessionVWAP)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MANUAL ANCHORED VWAP
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+var float anchorPV  = na
+var float anchorVol = na
+
+// na(time[1]) covers the first bar so an anchor earlier than loaded history
+// still seeds the accumulators instead of skipping the reset entirely.
+isAnchorStart = time >= anchorTime and (na(time[1]) or time[1] < anchorTime)
+
+if isAnchorStart
+    anchorPV  := hlc3 * volume
+    anchorVol := volume
+else if time >= anchorTime
+    anchorPV  := nz(anchorPV) + hlc3 * volume
+    anchorVol := nz(anchorVol) + volume
+
+anchoredVWAP = anchorVol > 0 ? anchorPV / anchorVol : na
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// HTF FILTER
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+htfEMA = request.security(syminfo.tickerid, htfTf, ta.ema(close, htfEmaLen), barmerge.gaps_off, barmerge.lookahead_off)
+htfBull = close > htfEMA
+htfBear = close < htfEMA
+htfValid = timeframe.in_seconds(htfTf) > timeframe.in_seconds(timeframe.period)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// SWINGS + LIQUIDITY SWEEPS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+pivotHigh = ta.pivothigh(high, swingLen, swingLen)
+pivotLow  = ta.pivotlow(low, swingLen, swingLen)
+
+var float lastSwingHigh = na
+var float lastSwingLow  = na
+
+if not na(pivotHigh)
+    lastSwingHigh := pivotHigh
+
+if not na(pivotLow)
+    lastSwingLow := pivotLow
+
+buySideSweep  = not na(lastSwingHigh) and high > lastSwingHigh and close < lastSwingHigh and barstate.isconfirmed
+sellSideSweep = not na(lastSwingLow) and low < lastSwingLow and close > lastSwingLow and barstate.isconfirmed
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TRAP ZONES
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+trappedBuyers  = buySideSweep and belowVWAP and relVol >= trapMinRelVol
+trappedSellers = sellSideSweep and aboveVWAP and relVol >= trapMinRelVol
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TREND VS CHOP REGIME
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+crossCount    = math.sum(ta.cross(close, sessionVWAP) ? 1 : 0, chopCrossLen)
+vwapFlat      = math.abs(vwapSlope) < atr * vwapFlatMult
+atrCompressed = atr < atrMA
+
+chopMode  = vwapFlat and atrCompressed and crossCount >= chopCrossMin
+bullTrend = aboveVWAP and vwapSlope > 0 and htfBull and not chopMode
+bearTrend = belowVWAP and vwapSlope < 0 and htfBear and not chopMode
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ORDER BLOCK ENGINE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+barRange = high - low
+displacementUp   = close > high[1] and barRange > atr * dispRangeMult and relVol > dispVolMult
+displacementDown = close < low[1] and barRange > atr * dispRangeMult and relVol > dispVolMult
+
+bullOB = close[1] < open[1] and displacementUp and barstate.isconfirmed
+bearOB = close[1] > open[1] and displacementDown and barstate.isconfirmed
+
+bullOBScore =
+     20 +
+     (relVol > strongVolMult ? 20 : relVol > dispVolMult ? 10 : 0) +
+     (aboveVWAP ? 20 : 0) +
+     (barRange > atr * strongRangeMult ? 20 : 10) +
+     (htfBull ? 20 : 0)
+
+bearOBScore =
+     20 +
+     (relVol > strongVolMult ? 20 : relVol > dispVolMult ? 10 : 0) +
+     (belowVWAP ? 20 : 0) +
+     (barRange > atr * strongRangeMult ? 20 : 10) +
+     (htfBear ? 20 : 0)
+
+qualifiedBullOB = bullOB and bullOBScore >= obMinScore
+qualifiedBearOB = bearOB and bearOBScore >= obMinScore
+
+var array<box> obBoxes = array.new<box>()
+
+f_addBox(_left, _right, _top, _bottom, _bg, _border) =>
+    array.push(obBoxes, box.new(left=_left, right=_right, top=_top, bottom=_bottom, bgcolor=_bg, border_color=_border))
+    if array.size(obBoxes) > maxBoxes
+        box.delete(array.shift(obBoxes))
+
+if showOB and qualifiedBullOB
+    f_addBox(bar_index - 1, bar_index + obBoxExtend, open[1], low[1], COL_BULL_OB_BG, COL_BULL_OB_BORDER)
+
+if showOB and qualifiedBearOB
+    f_addBox(bar_index - 1, bar_index + obBoxExtend, high[1], open[1], COL_BEAR_OB_BG, COL_BEAR_OB_BORDER)
+
+// Nearby current OB proxy: use most recent qualifying bar.
+recentBullOB = nz(ta.barssince(qualifiedBullOB), obRecentBars + 1) <= obRecentBars
+recentBearOB = nz(ta.barssince(qualifiedBearOB), obRecentBars + 1) <= obRecentBars
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// SCORE ENGINE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+longScore = 0
+longScore += aboveVWAP ? 20 : 0
+longScore += sellSideSweep ? 20 : 0
+longScore += recentBullOB ? 15 : 0
+longScore += trappedSellers ? 15 : 0
+longScore += bullTrend ? 10 : 0
+longScore += htfBull ? 10 : 0
+longScore += relVol >= scoreMinRelVol ? 10 : 0
+
+shortScore = 0
+shortScore += belowVWAP ? 20 : 0
+shortScore += buySideSweep ? 20 : 0
+shortScore += recentBearOB ? 15 : 0
+shortScore += trappedBuyers ? 15 : 0
+shortScore += bearTrend ? 10 : 0
+shortScore += htfBear ? 10 : 0
+shortScore += relVol >= scoreMinRelVol ? 10 : 0
+
+aPlusLong  = longScore >= scoreThreshold and barstate.isconfirmed
+aPlusShort = shortScore >= scoreThreshold and barstate.isconfirmed
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TRADE PLAN LEVELS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+longStop  = math.min(low, nz(lastSwingLow, low)) - atr * atrStopMult
+shortStop = math.max(high, nz(lastSwingHigh, high)) + atr * atrStopMult
+
+longRisk  = math.max(close - longStop, syminfo.mintick)
+shortRisk = math.max(shortStop - close, syminfo.mintick)
+
+longTP1 = close + longRisk
+longTP2 = close + longRisk * 2
+longTP3 = close + longRisk * 3
+
+shortTP1 = close - shortRisk
+shortTP2 = close - shortRisk * 2
+shortTP3 = close - shortRisk * 3
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// PLOTS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+plot(showVWAP ? sessionVWAP : na, "Session VWAP", color=color.yellow, linewidth=2)
+plot(showBands ? upper1 : na, "VWAP Upper 1", color=COL_BAND_UP1)
+plot(showBands ? lower1 : na, "VWAP Lower 1", color=COL_BAND_DN1)
+plot(showBands ? upper2 : na, "VWAP Upper 2", color=COL_BAND_UP2)
+plot(showBands ? lower2 : na, "VWAP Lower 2", color=COL_BAND_DN2)
+plot(showWeeklyVWAP ? weeklyVWAP : na, "Weekly VWAP", color=color.blue, linewidth=2)
+plot(showAnchorVWAP ? anchoredVWAP : na, "Anchored VWAP", color=color.purple, linewidth=2)
+
+bgcolor(chopMode ? COL_BG_CHOP : bullTrend ? COL_BG_BULL : bearTrend ? COL_BG_BEAR : na)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// SIGNAL MARKERS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if showSweeps and sellSideSweep
+    label.new(bar_index, low, "Sell-Side Sweep\nLook for Footprint Long Confirm", style=label.style_label_up, color=color.teal, textcolor=color.white, size=size.small)
+
+if showSweeps and buySideSweep
+    label.new(bar_index, high, "Buy-Side Sweep\nLook for Footprint Short Confirm", style=label.style_label_down, color=color.orange, textcolor=color.white, size=size.small)
+
+if showTraps and trappedSellers
+    label.new(bar_index, low, "Trapped Sellers\nConfirm CVD Turn Up", style=label.style_label_up, color=color.green, textcolor=color.white, size=size.small)
+
+if showTraps and trappedBuyers
+    label.new(bar_index, high, "Trapped Buyers\nConfirm CVD Roll Over", style=label.style_label_down, color=color.red, textcolor=color.white, size=size.small)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TRADE PLAN LABELS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_planText(_title, _score, _stop, _tp1, _tp2, _tp3, _checklist) =>
+    _title + "\nScore: " + str.tostring(_score) +
+     "\nEntry Ref: " + str.tostring(close, format.mintick) +
+     "\nStop: " + str.tostring(_stop, format.mintick) +
+     "\nTP1: " + str.tostring(_tp1, format.mintick) +
+     "\nTP2: " + str.tostring(_tp2, format.mintick) +
+     "\nTP3: " + str.tostring(_tp3, format.mintick) +
+     "\n\nConfirm with Footprint IQ:\n" + _checklist
+
+if showPlans and aPlusLong
+    label.new(bar_index, low, f_planText("A+ LONG SETUP", longScore, longStop, longTP1, longTP2, longTP3, LONG_CHECKLIST), style=label.style_label_up, color=color.green, textcolor=color.white)
+
+if showPlans and aPlusShort
+    label.new(bar_index, high, f_planText("A+ SHORT SETUP", shortScore, shortStop, shortTP1, shortTP2, shortTP3, SHORT_CHECKLIST), style=label.style_label_down, color=color.red, textcolor=color.white)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// DASHBOARD
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+var table dash = table.new(position.top_right, 2, 8, border_width=1)
+
+if showDashboard and barstate.islast
+    bias = longScore > shortScore ? "Bullish Setup Bias" : shortScore > longScore ? "Bearish Setup Bias" : "Neutral"
+    mode = chopMode ? "Chop / Balance" : bullTrend ? "Bull Trend" : bearTrend ? "Bear Trend" : "Neutral"
+    fpNeed = longScore >= scoreThreshold or shortScore >= scoreThreshold ? "REQUIRED" : "Wait"
+    htfState = htfBull ? "Bullish" : htfBear ? "Bearish" : "Neutral"
+    htfCell = htfValid ? htfState : htfState + " (TF <= chart!)"
+
+    table.cell(dash, 0, 0, "VWAP SMC Engine", bgcolor=color.black, text_color=color.white)
+    table.cell(dash, 1, 0, "Footprint Companion", bgcolor=color.black, text_color=color.white)
+
+    rowNames = array.from("Bias", "Mode", "Long Score", "Short Score", "HTF", "RelVol", "Footprint Confirm")
+    rowValues = array.from(bias, mode, str.tostring(longScore), str.tostring(shortScore), htfCell, str.tostring(relVol, "#.##") + "x", fpNeed)
+
+    for i = 0 to array.size(rowNames) - 1
+        table.cell(dash, 0, i + 1, array.get(rowNames, i))
+        table.cell(dash, 1, i + 1, array.get(rowValues, i))
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ALERTS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+alertcondition(aPlusLong, "A+ Long Setup", "VWAP SMC Engine: A+ LONG setup. Confirm with Footprint IQ Pro before entry: seller absorption, CVD turn up, buy imbalance stack.")
+alertcondition(aPlusShort, "A+ Short Setup", "VWAP SMC Engine: A+ SHORT setup. Confirm with Footprint IQ Pro before entry: buyer absorption, CVD rollover, sell imbalance stack.")
+
+alertcondition(sellSideSweep, "Sell-Side Sweep", "Sell-side liquidity swept. Look for Footprint IQ Pro long confirmation.")
+alertcondition(buySideSweep, "Buy-Side Sweep", "Buy-side liquidity swept. Look for Footprint IQ Pro short confirmation.")
+
+alertcondition(trappedSellers, "Trapped Sellers", "Trapped sellers detected. Confirm long with CVD turn up and buy imbalance stack.")
+alertcondition(trappedBuyers, "Trapped Buyers", "Trapped buyers detected. Confirm short with CVD rollover and sell imbalance stack.")
+
+alertcondition(bullVWAPReclaim, "Bullish VWAP Reclaim", "Price reclaimed VWAP. Confirm with Footprint IQ Pro.")
+alertcondition(bearVWAPReject, "Bearish VWAP Rejection", "Price rejected/crossed below VWAP. Confirm with Footprint IQ Pro.")
+alertcondition(chopMode, "Chop Warning", "VWAP SMC Engine: Chop/balance mode. Require stronger Footprint IQ confirmation.")
+alertcondition(qualifiedBullOB, "Bullish Order Block", "Bullish order block detected. Use Footprint IQ Pro for entry confirmation.")
+alertcondition(qualifiedBearOB, "Bearish Order Block", "Bearish order block detected. Use Footprint IQ Pro for entry confirmation.")
