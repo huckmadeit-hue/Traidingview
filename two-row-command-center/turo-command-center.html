@@ -1,0 +1,945 @@
+<title>Turo Fleet Command Center</title>
+<style>
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme: dark; }
+  }
+  :root {
+    --ink-1: #12181f;
+    --ink-2: #3f4a58;
+    --ink-3: #6b7688;
+    --surface-0: #eef0f3;
+    --surface-1: #f7f8fa;
+    --surface-2: #ffffff;
+    --surface-3: #e4e7ec;
+    --border: #d7dce3;
+    --accent: #3454d1;
+    --accent-ink: #ffffff;
+    --veh1: #1f9e8f;
+    --veh1-soft: #d8f0ec;
+    --veh2: #7c6fe0;
+    --veh2-soft: #e6e3fb;
+    --fleet: #4b5563;
+    --cost-fixed: #475569;
+    --cost-variable: #9ca3af;
+    --cost-charging: #2f8fd1;
+    --good: #16803d;
+    --good-soft: #d9f2e3;
+    --warn: #b45309;
+    --warn-soft: #fbe8cc;
+    --crit: #b91c1c;
+    --crit-soft: #fadada;
+    --grid: #dfe3e9;
+    --shadow: 0 1px 2px rgba(20,24,31,.06), 0 8px 24px rgba(20,24,31,.05);
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  :root[data-theme="dark"] {
+    --ink-1: #eef1f5;
+    --ink-2: #b7c0cc;
+    --ink-3: #838d9b;
+    --surface-0: #0e1116;
+    --surface-1: #14181f;
+    --surface-2: #1a1f27;
+    --surface-3: #232935;
+    --border: #2b323f;
+    --accent: #7d94ff;
+    --accent-ink: #0e1116;
+    --veh1: #3ec2b0;
+    --veh1-soft: #123833;
+    --veh2: #a49bef;
+    --veh2-soft: #2a2650;
+    --fleet: #9aa4b2;
+    --cost-fixed: #94a1b3;
+    --cost-variable: #616b7a;
+    --cost-charging: #63b3f0;
+    --good: #4ade80;
+    --good-soft: #123424;
+    --warn: #f2b155;
+    --warn-soft: #3a2a12;
+    --crit: #f87171;
+    --crit-soft: #3a1616;
+    --grid: #262d3a;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 32px rgba(0,0,0,.35);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink-1: #eef1f5; --ink-2: #b7c0cc; --ink-3: #838d9b;
+      --surface-0: #0e1116; --surface-1: #14181f; --surface-2: #1a1f27; --surface-3: #232935;
+      --border: #2b323f; --accent: #7d94ff; --accent-ink: #0e1116;
+      --veh1: #3ec2b0; --veh1-soft: #123833; --veh2: #a49bef; --veh2-soft: #2a2650;
+      --fleet: #9aa4b2; --cost-fixed: #94a1b3; --cost-variable: #616b7a; --cost-charging: #63b3f0;
+      --good: #4ade80; --good-soft: #123424; --warn: #f2b155; --warn-soft: #3a2a12;
+      --crit: #f87171; --crit-soft: #3a1616; --grid: #262d3a;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 32px rgba(0,0,0,.35);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--surface-0);
+    color: var(--ink-1);
+    font-family: var(--sans);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.4;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 24px 64px; }
+
+  .topbar {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 20px; flex-wrap: wrap; padding-bottom: 18px; margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; flex-direction: column; gap: 4px; }
+  .brand .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600;
+  }
+  .brand h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.01em; text-wrap: balance; }
+  .brand .sub { color: var(--ink-3); font-size: 13px; font-family: var(--mono); }
+
+  .controls { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .controls .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .btn {
+    font-family: var(--sans); font-size: 13px; font-weight: 600; padding: 8px 14px;
+    border-radius: 7px; border: 1px solid var(--border); background: var(--surface-2);
+    color: var(--ink-1); cursor: pointer; transition: filter .1s ease;
+  }
+  .btn:hover { filter: brightness(0.96); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .btn:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .status-line { font-size: 11px; color: var(--ink-3); font-family: var(--mono); }
+  input[type=file] { display: none; }
+
+  section { margin-bottom: 30px; }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; gap: 12px; flex-wrap: wrap; }
+  .section-head h2 { font-size: 14px; margin: 0; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); font-weight: 700; }
+  .section-head .hint { font-size: 12px; color: var(--ink-3); }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  @media (max-width: 980px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+  .kpi-tile {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px;
+  }
+  .kpi-tile .label { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .kpi-tile .value { font-family: var(--mono); font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+  .kpi-tile .value.neg { color: var(--crit); }
+  .kpi-tile .delta { font-size: 12px; font-family: var(--mono); color: var(--ink-3); }
+  .kpi-tile .delta.up { color: var(--good); }
+  .kpi-tile .delta.down { color: var(--crit); }
+
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 820px) { .cards { grid-template-columns: 1fr; } }
+  .car-card {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px 20px; box-shadow: var(--shadow); border-top: 3px solid var(--car-color, var(--accent));
+  }
+  .car-card .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .car-card .head h3 { margin: 0; font-size: 16px; font-weight: 700; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; background: var(--car-color); display: inline-block; margin-right: 8px; }
+  .car-card .metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px 14px; margin-bottom: 12px; }
+  .car-card .metrics .m .l { font-size: 10.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .05em; }
+  .car-card .metrics .m .v { font-family: var(--mono); font-size: 16px; font-weight: 700; }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill {
+    font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 999px;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .pill.good { background: var(--good-soft); color: var(--good); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.crit { background: var(--crit-soft); color: var(--crit); }
+
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 980px) { .chart-grid { grid-template-columns: 1fr; } }
+  .chart-card {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 16px 8px; box-shadow: var(--shadow); position: relative;
+  }
+  .chart-card h3 { margin: 0 0 2px; font-size: 13.5px; font-weight: 700; }
+  .chart-card .cap { font-size: 11.5px; color: var(--ink-3); margin-bottom: 6px; }
+  .chart-card.wide { grid-column: 1 / -1; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); margin: 4px 0 4px; flex-wrap: wrap; }
+  .legend .item { display: flex; align-items: center; gap: 6px; }
+  .legend .sw { width: 12px; height: 3px; border-radius: 2px; }
+  .legend .sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+  svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
+  .gridline { stroke: var(--grid); stroke-width: 1; }
+  .axis-label { fill: var(--ink-3); font-size: 10px; font-family: var(--mono); }
+  .tooltip {
+    position: absolute; pointer-events: none; background: var(--surface-3); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; font-size: 11.5px; box-shadow: var(--shadow);
+    opacity: 0; transition: opacity .08s ease; z-index: 5; white-space: nowrap;
+  }
+  .tooltip .t-title { font-family: var(--mono); color: var(--ink-3); margin-bottom: 4px; }
+  .tooltip .t-row { display: flex; align-items: center; gap: 6px; }
+  .tooltip .t-row .sw { width: 8px; height: 8px; border-radius: 2px; }
+  .crosshair { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 2 3; pointer-events: none; opacity: 0; }
+
+  .alerts-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface-2); box-shadow: var(--shadow); }
+  .alert-row { display: grid; grid-template-columns: 18px 130px 1fr auto; align-items: center; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .alert-row:last-child { border-bottom: none; }
+  .alert-row .stripe { width: 8px; height: 8px; border-radius: 50%; }
+  .alert-row .veh { font-weight: 700; color: var(--ink-2); font-size: 12.5px; }
+  .alert-row .detail { color: var(--ink-2); }
+  .empty-alerts { padding: 20px; text-align: center; color: var(--ink-3); font-size: 13px; }
+
+  details.table-toggle { margin-top: 10px; }
+  details.table-toggle summary { cursor: pointer; font-size: 12px; color: var(--accent); font-weight: 600; user-select: none; }
+  table.data-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 12px; margin-top: 10px; font-family: var(--mono); }
+  table.data-table th, table.data-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+  table.data-table th:first-child, table.data-table td:first-child { text-align: left; }
+  table.data-table th { color: var(--ink-3); font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; }
+  .table-scroll { overflow-x: auto; }
+
+  .upload-panel {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px;
+    box-shadow: var(--shadow); display: none; margin-bottom: 20px;
+  }
+  .upload-panel.open { display: block; }
+  .upload-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0; }
+  @media (max-width: 820px) { .upload-grid { grid-template-columns: 1fr 1fr; } }
+  .upload-slot { border: 1px dashed var(--border); border-radius: 9px; padding: 12px; text-align: center; }
+  .upload-slot label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+  .upload-slot .fname { font-size: 11px; color: var(--ink-3); margin-top: 6px; word-break: break-all; }
+  .upload-slot .fname.ok { color: var(--good); }
+  .templates { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+  .templates a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  .templates a:hover { text-decoration: underline; }
+
+  footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 12px; color: var(--ink-3); }
+  footer ol { padding-left: 18px; margin: 8px 0; }
+  footer li { margin-bottom: 4px; }
+</style>
+
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <span class="eyebrow">Fleet Ops · Turo</span>
+      <h1>Turo Fleet Command Center</h1>
+      <span class="sub" id="statusLine">No data loaded — upload CSVs or load sample data</span>
+    </div>
+    <div class="controls">
+      <div class="row">
+        <button class="btn" id="toggleUpload">Update Data</button>
+        <button class="btn" id="loadSample">Load Sample Data</button>
+        <button class="btn" id="clearData">Clear</button>
+        <button class="btn" id="toggleTheme" title="Toggle theme">Theme</button>
+      </div>
+      <span class="status-line" id="lastUpdated"></span>
+    </div>
+  </div>
+
+  <div class="upload-panel" id="uploadPanel">
+    <strong style="font-size:13px;">Import your data</strong>
+    <div class="templates">Export each Turo Command Center workbook tab to CSV, or start from blank templates:
+      <a id="tmplVehicles" download="Vehicles.csv">Vehicles.csv</a> ·
+      <a id="tmplTrips" download="Trips.csv">Trips.csv</a> ·
+      <a id="tmplExpenses" download="Expenses.csv">Expenses.csv</a> ·
+      <a id="tmplCharging" download="Charging.csv">Charging.csv</a>
+    </div>
+    <div class="upload-grid">
+      <div class="upload-slot">
+        <label for="fileVehicles">Vehicles.csv</label>
+        <input type="file" id="fileVehicles" accept=".csv" />
+        <button class="btn" onclick="document.getElementById('fileVehicles').click()">Choose file</button>
+        <div class="fname" id="fnameVehicles">none</div>
+      </div>
+      <div class="upload-slot">
+        <label for="fileTrips">Trips.csv</label>
+        <input type="file" id="fileTrips" accept=".csv" />
+        <button class="btn" onclick="document.getElementById('fileTrips').click()">Choose file</button>
+        <div class="fname" id="fnameTrips">none</div>
+      </div>
+      <div class="upload-slot">
+        <label for="fileExpenses">Expenses.csv</label>
+        <input type="file" id="fileExpenses" accept=".csv" />
+        <button class="btn" onclick="document.getElementById('fileExpenses').click()">Choose file</button>
+        <div class="fname" id="fnameExpenses">none</div>
+      </div>
+      <div class="upload-slot">
+        <label for="fileCharging">Charging.csv</label>
+        <input type="file" id="fileCharging" accept=".csv" />
+        <button class="btn" onclick="document.getElementById('fileCharging').click()">Choose file</button>
+        <div class="fname" id="fnameCharging">none</div>
+      </div>
+    </div>
+    <button class="btn primary" id="applyUpload">Recalculate Dashboard</button>
+  </div>
+
+  <section>
+    <div class="section-head"><h2>Fleet Overview</h2><span class="hint" id="fleetHint"></span></div>
+    <div class="kpi-grid" id="kpiGrid"></div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Per-Vehicle Profitability</h2></div>
+    <div class="cards" id="carCards"></div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Trends</h2><span class="hint">Trailing 12 months</span></div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h3>Monthly Net Profit</h3>
+        <div class="cap">Host earnings minus all costs, per vehicle and fleet total</div>
+        <div id="legendProfit" class="legend"></div>
+        <div style="position:relative;">
+          <svg class="chart" id="chartProfit" viewBox="0 0 560 240"></svg>
+          <div class="tooltip" id="ttProfit"></div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <h3>Monthly Utilization</h3>
+        <div class="cap">Booked days ÷ available days in month</div>
+        <div id="legendUtil" class="legend"></div>
+        <div style="position:relative;">
+          <svg class="chart" id="chartUtil" viewBox="0 0 560 240"></svg>
+          <div class="tooltip" id="ttUtil"></div>
+        </div>
+      </div>
+      <div class="chart-card wide">
+        <h3>Cost Breakdown by Vehicle</h3>
+        <div class="cap">Fixed (loan/lease, insurance, registration, subscriptions) vs. variable (maintenance, tires, cleaning, misc.) vs. charging</div>
+        <div id="legendCost" class="legend"></div>
+        <div style="position:relative;">
+          <svg class="chart" id="chartCost" viewBox="0 0 560 160"></svg>
+          <div class="tooltip" id="ttCost"></div>
+        </div>
+      </div>
+    </div>
+    <details class="table-toggle">
+      <summary>View monthly trend as a table</summary>
+      <div class="table-scroll">
+        <table class="data-table" id="trendTable"></table>
+      </div>
+    </details>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Operational Alerts</h2><span class="hint">Renewals, maintenance, utilization, margin</span></div>
+    <div class="alerts-list" id="alertsList"></div>
+  </section>
+
+  <footer>
+    <strong style="color:var(--ink-2)">Keeping this current</strong>
+    <ol>
+      <li>Log every trip, expense, and charging session in the companion <em>Turo_Command_Center.xlsx</em> workbook as it happens.</li>
+      <li>Weekly (or whenever you want a refresh): export each tab as CSV and click <strong>Update Data</strong> above to upload them.</li>
+      <li>This page recalculates everything in your browser and remembers your last upload via local storage — nothing is sent anywhere.</li>
+    </ol>
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var STORAGE_KEY = "turoCommandCenterData_v1";
+  var FIXED_CATEGORIES = ["Loan/Lease Payment","Insurance","Registration/Tax","Subscription (FSD/Connectivity)"];
+  var VEH_COLORS = ["#1f9e8f", "#7c6fe0"];
+  var VEH_COLOR_VARS = ["--veh1", "--veh2"];
+  var FLEET_COLOR = "var(--fleet)";
+
+  // ---------- theme ----------
+  var themeBtn = document.getElementById("toggleTheme");
+  function applyStoredTheme(){
+    var t = localStorage.getItem("ccTheme");
+    if (t) document.documentElement.setAttribute("data-theme", t);
+  }
+  themeBtn.addEventListener("click", function(){
+    var cur = document.documentElement.getAttribute("data-theme");
+    var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var next;
+    if (!cur) next = prefersDark ? "light" : "dark";
+    else next = cur === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("ccTheme", next);
+    renderAll();
+  });
+  applyStoredTheme();
+
+  // ---------- CSV parsing ----------
+  function parseCSV(text){
+    var rows = [];
+    var row = [];
+    var field = "";
+    var inQuotes = false;
+    text = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    for (var i = 0; i < text.length; i++){
+      var c = text[i];
+      if (inQuotes){
+        if (c === '"'){
+          if (text[i+1] === '"'){ field += '"'; i++; }
+          else inQuotes = false;
+        } else field += c;
+      } else {
+        if (c === '"') inQuotes = true;
+        else if (c === ","){ row.push(field); field = ""; }
+        else if (c === "\n"){ row.push(field); rows.push(row); row = []; field = ""; }
+        else field += c;
+      }
+    }
+    if (field.length || row.length){ row.push(field); rows.push(row); }
+    rows = rows.filter(function(r){ return !(r.length === 1 && r[0].trim() === ""); });
+    if (!rows.length) return [];
+    var headers = rows[0].map(function(h){ return h.trim(); });
+    return rows.slice(1).map(function(r){
+      var obj = {};
+      headers.forEach(function(h, idx){ obj[h] = (r[idx] !== undefined ? r[idx].trim() : ""); });
+      return obj;
+    });
+  }
+
+  function num(v){ var n = parseFloat(String(v).replace(/[$,%]/g, "")); return isNaN(n) ? 0 : n; }
+  function toDate(v){ if (!v) return null; var d = new Date(v); return isNaN(d.getTime()) ? null : d; }
+  function monthKey(d){ return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"); }
+  function daysBetween(a, b){ return Math.round((b - a) / 86400000); }
+  function daysInMonth(y, m){ return new Date(y, m+1, 0).getDate(); }
+  function fmtMoney(n){ var neg = n < 0; n = Math.abs(n); var s = "$" + n.toLocaleString(undefined,{maximumFractionDigits:0}); return neg ? "-" + s : s; }
+  function fmtPct(n){ return (n*100).toFixed(1) + "%"; }
+
+  // ---------- sample data ----------
+  function sampleCSVs(){
+    var vehicles = "Vehicle ID,VIN,In-Service Date,Purchase Price,Financing Type,Monthly Loan/Lease Payment,Loan Balance Remaining,Monthly Insurance Premium,Annual Registration/Tax,Turo Commission Rate (Protection Plan),Current Odometer (mi),Next Maintenance Due (mi),Next Maintenance Due (date),Tire Replacement Due (mi),Insurance Renewal Date,Registration Renewal Date,Status\n" +
+      "Model Y #1 - White,5YJYGDEE1NF000001,2024-03-01,52000,Loan,850,31000,180,420,0.25,28500,35000,2026-09-01,40000,2027-03-01,2027-03-01,Active\n" +
+      "Model Y #2 - Black,5YJYGDEE2NF000002,2024-06-15,54000,Cash,0,0,175,420,0.25,21000,30000,2026-08-15,40000,2027-06-15,2027-06-15,Active\n";
+    var today = new Date();
+    var trips = "Trip ID,Vehicle,Guest Name,Trip Start Date,Trip End Date,Trip Days,Guest Trip Price ($),Host Net Earnings ($),Turo Fee ($),Miles Driven,Trip Rating (1-5),Month,Notes\n";
+    var expenses = "Date,Vehicle,Category,Description,Amount ($),Month,Notes\n";
+    var charging = "Date,Vehicle,Location Type,kWh Added,Cost ($),Cost per kWh,Odometer at Charge (mi),Month,Notes\n";
+    var tripId = 1000;
+    for (var m = 11; m >= 0; m--){
+      var d0 = new Date(today.getFullYear(), today.getMonth()-m, 3);
+      ["Model Y #1 - White","Model Y #2 - Black"].forEach(function(veh, vi){
+        var count = 2 + ((m + vi) % 3);
+        for (var k = 0; k < count; k++){
+          tripId++;
+          var start = new Date(d0.getFullYear(), d0.getMonth(), 2 + k*6);
+          var days = 2 + (k % 3);
+          var end = new Date(start.getTime() + days*86400000);
+          var price = 110 * days + (vi===0 ? 15 : 0);
+          var host = Math.round(price * 0.75);
+          var fee = price - host;
+          var miles = 40 * days + (k*10);
+          trips += ["TR-"+tripId, veh, "Guest "+tripId, start.toISOString().slice(0,10), end.toISOString().slice(0,10),
+                     days, price, host, fee, miles, 5, monthKey(start), ""].join(",") + "\n";
+        }
+        var loanAmt = vi===0 ? 850 : 0;
+        if (loanAmt) expenses += [new Date(d0.getFullYear(),d0.getMonth(),1).toISOString().slice(0,10), veh, "Loan/Lease Payment", "Monthly payment", loanAmt, monthKey(d0), ""].join(",")+"\n";
+        var ins = vi===0 ? 180 : 175;
+        expenses += [new Date(d0.getFullYear(),d0.getMonth(),1).toISOString().slice(0,10), veh, "Insurance", "Monthly premium", ins, monthKey(d0), ""].join(",")+"\n";
+        if (m % 4 === 0) expenses += [new Date(d0.getFullYear(),d0.getMonth(),12).toISOString().slice(0,10), veh, "Cleaning/Detailing", "Detail between trips", 45, monthKey(d0), ""].join(",")+"\n";
+        if (m === 6) expenses += [new Date(d0.getFullYear(),d0.getMonth(),18).toISOString().slice(0,10), veh, "Maintenance/Repair", "Tire rotation + wiper blades", 120, monthKey(d0), ""].join(",")+"\n";
+        var kwh = 30 + (vi*8) + (m%3)*6;
+        var cost = +(kwh * 0.34).toFixed(2);
+        charging += [new Date(d0.getFullYear(),d0.getMonth(),5).toISOString().slice(0,10), veh, "Supercharger", kwh, cost, +(cost/kwh).toFixed(3), "", monthKey(d0), ""].join(",")+"\n";
+      });
+    }
+    return { vehicles: vehicles, trips: trips, expenses: expenses, charging: charging };
+  }
+
+  // ---------- state ----------
+  var state = { vehicles: [], trips: [], expenses: [], charging: [], lastUpdated: null };
+
+  function loadFromStorage(){
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (raw){ state = JSON.parse(raw); return true; }
+    } catch(e){}
+    return false;
+  }
+  function saveToStorage(){
+    state.lastUpdated = new Date().toISOString();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+  function setDataFromCSVs(csvs){
+    state.vehicles = parseCSV(csvs.vehicles);
+    state.trips = parseCSV(csvs.trips);
+    state.expenses = parseCSV(csvs.expenses);
+    state.charging = parseCSV(csvs.charging);
+    saveToStorage();
+  }
+
+  // ---------- templates ----------
+  function blankTemplate(name){
+    var headers = {
+      vehicles: "Vehicle ID,VIN,In-Service Date,Purchase Price,Financing Type,Monthly Loan/Lease Payment,Loan Balance Remaining,Monthly Insurance Premium,Annual Registration/Tax,Turo Commission Rate (Protection Plan),Current Odometer (mi),Next Maintenance Due (mi),Next Maintenance Due (date),Tire Replacement Due (mi),Insurance Renewal Date,Registration Renewal Date,Status\n",
+      trips: "Trip ID,Vehicle,Guest Name,Trip Start Date,Trip End Date,Trip Days,Guest Trip Price ($),Host Net Earnings ($),Turo Fee ($),Miles Driven,Trip Rating (1-5),Month,Notes\n",
+      expenses: "Date,Vehicle,Category,Description,Amount ($),Month,Notes\n",
+      charging: "Date,Vehicle,Location Type,kWh Added,Cost ($),Cost per kWh,Odometer at Charge (mi),Month,Notes\n"
+    };
+    return headers[name];
+  }
+  function wireTemplateLink(id, name){
+    var blob = new Blob([blankTemplate(name)], {type: "text/csv"});
+    document.getElementById(id).href = URL.createObjectURL(blob);
+  }
+  wireTemplateLink("tmplVehicles", "vehicles");
+  wireTemplateLink("tmplTrips", "trips");
+  wireTemplateLink("tmplExpenses", "expenses");
+  wireTemplateLink("tmplCharging", "charging");
+
+  // ---------- upload panel wiring ----------
+  var pendingFiles = {};
+  document.getElementById("toggleUpload").addEventListener("click", function(){
+    document.getElementById("uploadPanel").classList.toggle("open");
+  });
+  [["fileVehicles","vehicles","fnameVehicles"],["fileTrips","trips","fnameTrips"],
+   ["fileExpenses","expenses","fnameExpenses"],["fileCharging","charging","fnameCharging"]].forEach(function(t){
+    document.getElementById(t[0]).addEventListener("change", function(e){
+      var f = e.target.files[0];
+      if (!f) return;
+      var reader = new FileReader();
+      reader.onload = function(ev){
+        pendingFiles[t[1]] = ev.target.result;
+        var el = document.getElementById(t[2]);
+        el.textContent = f.name;
+        el.classList.add("ok");
+      };
+      reader.readAsText(f);
+    });
+  });
+  document.getElementById("applyUpload").addEventListener("click", function(){
+    var merged = {
+      vehicles: pendingFiles.vehicles !== undefined ? pendingFiles.vehicles : (state._raw && state._raw.vehicles) || rowsToCSV(state.vehicles),
+      trips: pendingFiles.trips !== undefined ? pendingFiles.trips : (state._raw && state._raw.trips) || rowsToCSV(state.trips),
+      expenses: pendingFiles.expenses !== undefined ? pendingFiles.expenses : (state._raw && state._raw.expenses) || rowsToCSV(state.expenses),
+      charging: pendingFiles.charging !== undefined ? pendingFiles.charging : (state._raw && state._raw.charging) || rowsToCSV(state.charging)
+    };
+    state._raw = merged;
+    setDataFromCSVs(merged);
+    document.getElementById("uploadPanel").classList.remove("open");
+    renderAll();
+  });
+  document.getElementById("loadSample").addEventListener("click", function(){
+    var csvs = sampleCSVs();
+    state._raw = csvs;
+    setDataFromCSVs(csvs);
+    renderAll();
+  });
+  document.getElementById("clearData").addEventListener("click", function(){
+    localStorage.removeItem(STORAGE_KEY);
+    state = { vehicles: [], trips: [], expenses: [], charging: [], lastUpdated: null };
+    pendingFiles = {};
+    ["fnameVehicles","fnameTrips","fnameExpenses","fnameCharging"].forEach(function(id){
+      var el = document.getElementById(id); el.textContent = "none"; el.classList.remove("ok");
+    });
+    renderAll();
+  });
+
+  function rowsToCSV(rows){
+    if (!rows || !rows.length) return "";
+    var headers = Object.keys(rows[0]);
+    var lines = [headers.join(",")];
+    rows.forEach(function(r){
+      lines.push(headers.map(function(h){
+        var v = r[h] === undefined ? "" : String(r[h]);
+        return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v;
+      }).join(","));
+    });
+    return lines.join("\n") + "\n";
+  }
+
+  // ---------- computation ----------
+  function computeModel(){
+    var vehicles = state.vehicles.map(function(v){ return v["Vehicle ID"]; }).filter(Boolean);
+    var now = new Date();
+
+    function vehicleRecord(name){
+      var vRow = state.vehicles.find(function(v){ return v["Vehicle ID"] === name; }) || {};
+      var trips = state.trips.filter(function(t){ return t["Vehicle"] === name; });
+      var expenses = state.expenses.filter(function(e){ return e["Vehicle"] === name; });
+      var charging = state.charging.filter(function(c){ return c["Vehicle"] === name; });
+
+      var inService = toDate(vRow["In-Service Date"]) || now;
+      var daysInService = Math.max(daysBetween(inService, now), 1);
+      var totalTrips = trips.length;
+      var bookedDays = trips.reduce(function(s,t){ return s + num(t["Trip Days"]); }, 0);
+      var utilization = bookedDays / daysInService;
+      var grossGuestRevenue = trips.reduce(function(s,t){ return s + num(t["Guest Trip Price ($)"]); }, 0);
+      var hostNetEarnings = trips.reduce(function(s,t){ return s + num(t["Host Net Earnings ($)"]); }, 0);
+      var turoFees = trips.reduce(function(s,t){ return s + num(t["Turo Fee ($)"]); }, 0);
+      var adr = bookedDays ? hostNetEarnings / bookedDays : 0;
+      var totalMiles = trips.reduce(function(s,t){ return s + num(t["Miles Driven"]); }, 0);
+      var chargingCost = charging.reduce(function(s,c){ return s + num(c["Cost ($)"]); }, 0);
+      var costPerMile = totalMiles ? chargingCost / totalMiles : 0;
+      var fixedCosts = expenses.filter(function(e){ return FIXED_CATEGORIES.indexOf(e["Category"]) > -1; })
+                                .reduce(function(s,e){ return s + num(e["Amount ($)"]); }, 0);
+      var totalExpenses = expenses.reduce(function(s,e){ return s + num(e["Amount ($)"]); }, 0);
+      var variableCosts = totalExpenses - fixedCosts;
+      var totalCosts = fixedCosts + variableCosts + chargingCost;
+      var netProfit = hostNetEarnings - totalCosts;
+      var netMargin = hostNetEarnings ? netProfit / hostNetEarnings : 0;
+      var profitPerDay = netProfit / daysInService;
+      var breakEvenUtilization = adr ? fixedCosts / (adr * daysInService) : 0;
+
+      return {
+        name: name, vRow: vRow, daysInService: daysInService, totalTrips: totalTrips, bookedDays: bookedDays,
+        utilization: utilization, grossGuestRevenue: grossGuestRevenue, hostNetEarnings: hostNetEarnings,
+        turoFees: turoFees, adr: adr, totalMiles: totalMiles, chargingCost: chargingCost, costPerMile: costPerMile,
+        fixedCosts: fixedCosts, variableCosts: variableCosts, totalCosts: totalCosts, netProfit: netProfit,
+        netMargin: netMargin, profitPerDay: profitPerDay, breakEvenUtilization: breakEvenUtilization
+      };
+    }
+
+    var perVehicle = vehicles.map(vehicleRecord);
+    var fleet = {
+      name: "Fleet Total",
+      daysInService: perVehicle.reduce(function(s,v){ return s+v.daysInService; }, 0),
+      totalTrips: perVehicle.reduce(function(s,v){ return s+v.totalTrips; }, 0),
+      bookedDays: perVehicle.reduce(function(s,v){ return s+v.bookedDays; }, 0),
+      grossGuestRevenue: perVehicle.reduce(function(s,v){ return s+v.grossGuestRevenue; }, 0),
+      hostNetEarnings: perVehicle.reduce(function(s,v){ return s+v.hostNetEarnings; }, 0),
+      turoFees: perVehicle.reduce(function(s,v){ return s+v.turoFees; }, 0),
+      totalMiles: perVehicle.reduce(function(s,v){ return s+v.totalMiles; }, 0),
+      chargingCost: perVehicle.reduce(function(s,v){ return s+v.chargingCost; }, 0),
+      fixedCosts: perVehicle.reduce(function(s,v){ return s+v.fixedCosts; }, 0),
+      variableCosts: perVehicle.reduce(function(s,v){ return s+v.variableCosts; }, 0),
+      totalCosts: perVehicle.reduce(function(s,v){ return s+v.totalCosts; }, 0),
+      netProfit: perVehicle.reduce(function(s,v){ return s+v.netProfit; }, 0)
+    };
+    fleet.utilization = fleet.daysInService ? fleet.bookedDays / fleet.daysInService : 0;
+    fleet.adr = fleet.bookedDays ? fleet.hostNetEarnings / fleet.bookedDays : 0;
+    fleet.costPerMile = fleet.totalMiles ? fleet.chargingCost / fleet.totalMiles : 0;
+    fleet.netMargin = fleet.hostNetEarnings ? fleet.netProfit / fleet.hostNetEarnings : 0;
+
+    // monthly trend, trailing 12 months
+    var months = [];
+    for (var i = 11; i >= 0; i--){
+      var d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+      months.push({ date: d, key: monthKey(d), label: d.toLocaleString(undefined,{month:"short",year:"2-digit"}) });
+    }
+    months.forEach(function(mo){
+      mo.perVehicle = vehicles.map(function(name){
+        var trips = state.trips.filter(function(t){ return t["Vehicle"] === name && (t["Month"] === mo.key || monthKey(toDate(t["Trip Start Date"])||now) === mo.key); });
+        var expenses = state.expenses.filter(function(e){ return e["Vehicle"] === name && (e["Month"] === mo.key || monthKey(toDate(e["Date"])||now) === mo.key); });
+        var charging = state.charging.filter(function(c){ return c["Vehicle"] === name && (c["Month"] === mo.key || monthKey(toDate(c["Date"])||now) === mo.key); });
+        var earnings = trips.reduce(function(s,t){ return s + num(t["Host Net Earnings ($)"]); }, 0);
+        var costs = expenses.reduce(function(s,e){ return s + num(e["Amount ($)"]); }, 0) + charging.reduce(function(s,c){ return s + num(c["Cost ($)"]); }, 0);
+        var bookedDays = trips.reduce(function(s,t){ return s + num(t["Trip Days"]); }, 0);
+        var util = bookedDays / daysInMonth(mo.date.getFullYear(), mo.date.getMonth());
+        return { name: name, earnings: earnings, costs: costs, profit: earnings-costs, util: util };
+      });
+      mo.fleetEarnings = mo.perVehicle.reduce(function(s,v){ return s+v.earnings; }, 0);
+      mo.fleetCosts = mo.perVehicle.reduce(function(s,v){ return s+v.costs; }, 0);
+      mo.fleetProfit = mo.fleetEarnings - mo.fleetCosts;
+      var nVeh = vehicles.length || 1;
+      mo.fleetUtil = mo.perVehicle.reduce(function(s,v){ return s+v.util; }, 0) / nVeh;
+    });
+
+    // alerts
+    var alerts = [];
+    perVehicle.forEach(function(v){
+      var vRow = v.vRow;
+      function renewalAlert(label, dateField){
+        var d = toDate(vRow[dateField]);
+        if (!d) return;
+        var days = daysBetween(now, d);
+        alerts.push({ vehicle: v.name, type: label, detail: label + " " + d.toLocaleDateString() + " (" + days + " days)",
+                       severity: days < 60 ? "warn" : "good" });
+      }
+      renewalAlert("Insurance Renewal", "Insurance Renewal Date");
+      renewalAlert("Registration Renewal", "Registration Renewal Date");
+      var odo = num(vRow["Current Odometer (mi)"]);
+      var nextMaint = num(vRow["Next Maintenance Due (mi)"]);
+      if (nextMaint){
+        var remain = nextMaint - odo;
+        alerts.push({ vehicle: v.name, type: "Maintenance", detail: remain + " mi until next service",
+                       severity: remain < 1000 ? "warn" : "good" });
+      }
+      alerts.push({ vehicle: v.name, type: "Utilization", detail: fmtPct(v.utilization) + " of available days booked",
+                     severity: v.utilization < 0.4 ? "warn" : "good" });
+      var margSev = v.netMargin < 0 ? "crit" : (v.netMargin < 0.15 ? "warn" : "good");
+      alerts.push({ vehicle: v.name, type: "Profitability", detail: fmtPct(v.netMargin) + " net margin",
+                     severity: margSev });
+    });
+    var sevOrder = { crit: 0, warn: 1, good: 2 };
+    alerts.sort(function(a,b){ return sevOrder[a.severity]-sevOrder[b.severity]; });
+
+    return { vehicles: vehicles, perVehicle: perVehicle, fleet: fleet, months: months, alerts: alerts };
+  }
+
+  // ---------- rendering ----------
+  function colorFor(idx){ return VEH_COLORS[idx % VEH_COLORS.length]; }
+  function cssVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  function renderKPIs(model){
+    var grid = document.getElementById("kpiGrid");
+    var f = model.fleet;
+    var last = model.months[model.months.length-1], prev = model.months[model.months.length-2];
+    function deltaHTML(curr, prevVal, isPct){
+      if (prev === undefined) return "";
+      var d = curr - prevVal;
+      var cls = d > 0 ? "up" : (d < 0 ? "down" : "");
+      var arrow = d > 0 ? "▲" : (d < 0 ? "▼" : "•");
+      var txt = isPct ? (Math.abs(d*100).toFixed(1) + "pp") : fmtMoney(Math.abs(d));
+      return '<span class="delta ' + cls + '">' + arrow + ' ' + txt + ' vs prior mo.</span>';
+    }
+    var tiles = [
+      { label: "Host Net Earnings", value: fmtMoney(f.hostNetEarnings), delta: last && prev ? deltaHTML(last.fleetEarnings, prev.fleetEarnings, false) : "" },
+      { label: "Net Profit", value: fmtMoney(f.netProfit), neg: f.netProfit < 0, delta: last && prev ? deltaHTML(last.fleetProfit, prev.fleetProfit, false) : "" },
+      { label: "Net Margin", value: fmtPct(f.netMargin), neg: f.netMargin < 0 },
+      { label: "Fleet Utilization", value: fmtPct(f.utilization), delta: last && prev ? deltaHTML(last.fleetUtil, prev.fleetUtil, true) : "" },
+      { label: "Total Trips", value: String(f.totalTrips) }
+    ];
+    grid.innerHTML = tiles.map(function(t){
+      return '<div class="kpi-tile"><span class="label">' + t.label + '</span>' +
+             '<span class="value' + (t.neg ? " neg" : "") + '">' + t.value + '</span>' +
+             (t.delta || "") + '</div>';
+    }).join("");
+    document.getElementById("fleetHint").textContent = model.vehicles.length + " vehicle" + (model.vehicles.length===1?"":"s") + " tracked";
+  }
+
+  function renderCards(model){
+    var wrap = document.getElementById("carCards");
+    wrap.innerHTML = "";
+    model.perVehicle.forEach(function(v, idx){
+      var color = colorFor(idx);
+      var card = document.createElement("div");
+      card.className = "car-card";
+      card.style.setProperty("--car-color", color);
+      var metrics = [
+        ["Utilization", fmtPct(v.utilization)],
+        ["Avg Daily Rate", fmtMoney(v.adr)],
+        ["Net Profit", fmtMoney(v.netProfit)],
+        ["Net Margin", fmtPct(v.netMargin)],
+        ["Cost / Mile", "$" + v.costPerMile.toFixed(2)],
+        ["Break-even Util.", fmtPct(v.breakEvenUtilization)]
+      ];
+      var vAlerts = model.alerts.filter(function(a){ return a.vehicle === v.name; });
+      card.innerHTML =
+        '<div class="head"><h3><span class="swatch"></span>' + v.name + '</h3></div>' +
+        '<div class="metrics">' + metrics.map(function(m){
+          return '<div class="m"><div class="l">' + m[0] + '</div><div class="v">' + m[1] + '</div></div>';
+        }).join("") + '</div>' +
+        '<div class="pills">' + vAlerts.map(function(a){
+          return '<span class="pill ' + a.severity + '">' + a.type + '</span>';
+        }).join("") + '</div>';
+      wrap.appendChild(card);
+    });
+  }
+
+  // ---------- SVG chart helpers ----------
+  function svgEl(tag, attrs){
+    var el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (var k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
+  function renderLineChart(svgId, ttId, series, opts){
+    var svg = document.getElementById(svgId);
+    svg.innerHTML = "";
+    var W = 560, H = 240, padL = 46, padR = 12, padT = 14, padB = 26;
+    var plotW = W - padL - padR, plotH = H - padT - padB;
+    var allVals = [];
+    series.forEach(function(s){ s.values.forEach(function(v){ allVals.push(v); }); });
+    var maxV = Math.max.apply(null, allVals.concat([0]));
+    var minV = Math.min.apply(null, allVals.concat([0]));
+    if (maxV === minV) maxV = minV + 1;
+    var n = series[0].values.length;
+    function x(i){ return padL + (n<=1 ? 0 : (i/(n-1)) * plotW); }
+    function y(v){ return padT + plotH - ((v-minV)/(maxV-minV)) * plotH; }
+
+    // gridlines (4)
+    for (var g = 0; g <= 3; g++){
+      var gv = minV + (maxV-minV)*g/3;
+      var gy = y(gv);
+      svg.appendChild(svgEl("line", { x1: padL, x2: W-padR, y1: gy, y2: gy, class: "gridline" }));
+      var lbl = svgEl("text", { x: 4, y: gy+3, class: "axis-label" });
+      lbl.textContent = opts.fmt(gv);
+      svg.appendChild(lbl);
+    }
+    // zero line emphasis if within range
+    if (minV < 0 && maxV > 0){
+      svg.appendChild(svgEl("line", { x1: padL, x2: W-padR, y1: y(0), y2: y(0), class: "gridline", style: "opacity:.9" }));
+    }
+    // x labels (every other month)
+    series[0].labels.forEach(function(lab, i){
+      if (i % 2 !== 0 && i !== n-1) return;
+      var t = svgEl("text", { x: x(i), y: H-6, class: "axis-label", "text-anchor": i===n-1 ? "end" : "middle" });
+      t.textContent = lab;
+      svg.appendChild(t);
+    });
+
+    series.forEach(function(s){
+      var d = s.values.map(function(v,i){ return (i===0?"M":"L") + x(i).toFixed(1) + "," + y(v).toFixed(1); }).join(" ");
+      svg.appendChild(svgEl("path", { d: d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round" }));
+    });
+    // endpoint markers + direct label on last point
+    series.forEach(function(s){
+      var i = n-1;
+      svg.appendChild(svgEl("circle", { cx: x(i), cy: y(s.values[i]), r: 3.5, fill: s.color }));
+    });
+
+    var crossLine = svgEl("line", { class: "crosshair", y1: padT, y2: H-padB });
+    svg.appendChild(crossLine);
+    var dots = series.map(function(s){ return svgEl("circle", { r: 4, fill: s.color, opacity: 0 }); });
+    dots.forEach(function(dot){ svg.appendChild(dot); });
+
+    var hitArea = svgEl("rect", { x: padL, y: padT, width: plotW, height: plotH, fill: "transparent" });
+    svg.appendChild(hitArea);
+    var tt = document.getElementById(ttId);
+
+    function onMove(evt){
+      var rect = svg.getBoundingClientRect();
+      var scaleX = W / rect.width;
+      var mx = (evt.clientX - rect.left) * scaleX;
+      var i = Math.round(((mx - padL) / plotW) * (n-1));
+      i = Math.max(0, Math.min(n-1, i));
+      crossLine.setAttribute("x1", x(i)); crossLine.setAttribute("x2", x(i));
+      crossLine.style.opacity = 1;
+      dots.forEach(function(dot, si){ dot.setAttribute("cx", x(i)); dot.setAttribute("cy", y(series[si].values[i])); dot.setAttribute("opacity", 1); });
+      var html = '<div class="t-title">' + series[0].labels[i] + '</div>' +
+        series.map(function(s,si){ return '<div class="t-row"><span class="sw" style="background:'+s.color+'"></span>' + s.name + ': ' + opts.fmt(s.values[i]) + '</div>'; }).join("");
+      tt.innerHTML = html;
+      tt.style.opacity = 1;
+      var left = (x(i)/W)*rect.width;
+      tt.style.left = Math.min(rect.width-140, Math.max(0,left+10)) + "px";
+      tt.style.top = "6px";
+    }
+    hitArea.addEventListener("mousemove", onMove);
+    hitArea.addEventListener("mouseleave", function(){
+      crossLine.style.opacity = 0; dots.forEach(function(d){ d.setAttribute("opacity",0); }); tt.style.opacity = 0;
+    });
+  }
+
+  function renderStackedBar(svgId, ttId, categories, segments, opts){
+    var svg = document.getElementById(svgId);
+    svg.innerHTML = "";
+    var W = 560, H = 160, padL = 150, padR = 12, padT = 10, padB = 22;
+    var plotW = W - padL - padR, plotH = H - padT - padB;
+    var totals = categories.map(function(_, ci){ return segments.reduce(function(s,seg){ return s+seg.values[ci]; }, 0); });
+    var maxV = Math.max.apply(null, totals.concat([1]));
+    var barH = plotH / categories.length * 0.55;
+    var gap = plotH / categories.length;
+
+    for (var g = 0; g <= 3; g++){
+      var gv = maxV*g/3;
+      var gx = padL + (gv/maxV)*plotW;
+      svg.appendChild(svgEl("line", { x1: gx, x2: gx, y1: padT, y2: H-padB, class: "gridline" }));
+      var lbl = svgEl("text", { x: gx, y: H-6, class: "axis-label", "text-anchor": "middle" });
+      lbl.textContent = opts.fmt(gv);
+      svg.appendChild(lbl);
+    }
+
+    var tt = document.getElementById(ttId);
+    categories.forEach(function(cat, ci){
+      var yTop = padT + ci*gap + (gap-barH)/2;
+      var label = svgEl("text", { x: padL-8, y: yTop+barH/2+4, class: "axis-label", "text-anchor": "end" });
+      label.textContent = cat;
+      svg.appendChild(label);
+      var xCur = padL;
+      segments.forEach(function(seg){
+        var val = seg.values[ci];
+        var w = (val/maxV)*plotW;
+        if (w > 0){
+          var rect = svgEl("rect", { x: xCur+1, y: yTop, width: Math.max(w-2,0), height: barH, rx: 3, fill: seg.color });
+          rect.addEventListener("mousemove", function(e){
+            var rectBB = svg.getBoundingClientRect();
+            tt.innerHTML = '<div class="t-title">'+cat+' · '+seg.name+'</div><div class="t-row"><span class="sw" style="background:'+seg.color+'"></span>'+opts.fmt(val)+'</div>';
+            tt.style.opacity = 1;
+            tt.style.left = Math.min(rectBB.width-140, (e.clientX-rectBB.left)+10) + "px";
+            tt.style.top = (yTop*(rectBB.height/H)) + "px";
+          });
+          rect.addEventListener("mouseleave", function(){ tt.style.opacity = 0; });
+          svg.appendChild(rect);
+        }
+        xCur += w;
+      });
+    });
+  }
+
+  function renderCharts(model){
+    var months = model.months;
+    var labels = months.map(function(m){ return m.label; });
+    var profitSeries = model.vehicles.map(function(name, idx){
+      return { name: name, color: colorFor(idx), labels: labels, values: months.map(function(m){ return m.perVehicle[idx].profit; }) };
+    });
+    profitSeries.push({ name: "Fleet", color: cssVar("--fleet"), labels: labels, values: months.map(function(m){ return m.fleetProfit; }) });
+    renderLineChart("chartProfit", "ttProfit", profitSeries, { fmt: fmtMoney });
+    document.getElementById("legendProfit").innerHTML = profitSeries.map(function(s){
+      return '<span class="item"><span class="sw" style="background:'+s.color+'"></span>'+s.name+'</span>';
+    }).join("");
+
+    var utilSeries = model.vehicles.map(function(name, idx){
+      return { name: name, color: colorFor(idx), labels: labels, values: months.map(function(m){ return m.perVehicle[idx].util; }) };
+    });
+    utilSeries.push({ name: "Fleet", color: cssVar("--fleet"), labels: labels, values: months.map(function(m){ return m.fleetUtil; }) });
+    renderLineChart("chartUtil", "ttUtil", utilSeries, { fmt: fmtPct });
+    document.getElementById("legendUtil").innerHTML = utilSeries.map(function(s){
+      return '<span class="item"><span class="sw" style="background:'+s.color+'"></span>'+s.name+'</span>';
+    }).join("");
+
+    var cats = model.perVehicle.map(function(v){ return v.name; });
+    var segs = [
+      { name: "Fixed", color: cssVar("--cost-fixed"), values: model.perVehicle.map(function(v){ return v.fixedCosts; }) },
+      { name: "Variable", color: cssVar("--cost-variable"), values: model.perVehicle.map(function(v){ return v.variableCosts; }) },
+      { name: "Charging", color: cssVar("--cost-charging"), values: model.perVehicle.map(function(v){ return v.chargingCost; }) }
+    ];
+    renderStackedBar("chartCost", "ttCost", cats, segs, { fmt: fmtMoney });
+    document.getElementById("legendCost").innerHTML = segs.map(function(s){
+      return '<span class="item"><span class="sw" style="background:'+s.color+'"></span>'+s.name+'</span>';
+    }).join("");
+  }
+
+  function renderAlerts(model){
+    var list = document.getElementById("alertsList");
+    if (!model.alerts.length){
+      list.innerHTML = '<div class="empty-alerts">No alerts — load data to see renewals, maintenance, and profitability flags.</div>';
+      return;
+    }
+    var colorMap = { good: "var(--good)", warn: "var(--warn)", crit: "var(--crit)" };
+    list.innerHTML = model.alerts.map(function(a){
+      return '<div class="alert-row"><span class="stripe" style="background:'+colorMap[a.severity]+'"></span>' +
+             '<span class="veh">'+a.vehicle+'</span><span class="detail">'+a.type+' — '+a.detail+'</span>' +
+             '<span class="pill '+a.severity+'">'+(a.severity==="good"?"OK":a.severity==="warn"?"Watch":"Action needed")+'</span></div>';
+    }).join("");
+  }
+
+  function renderTable(model){
+    var t = document.getElementById("trendTable");
+    var rowsHtml = "<thead><tr><th>Month</th>";
+    model.vehicles.forEach(function(v){ rowsHtml += "<th>"+v+" Profit</th><th>"+v+" Util%</th>"; });
+    rowsHtml += "<th>Fleet Profit</th><th>Fleet Util%</th></tr></thead><tbody>";
+    model.months.forEach(function(m){
+      rowsHtml += "<tr><td>"+m.label+"</td>";
+      m.perVehicle.forEach(function(v){ rowsHtml += "<td>"+fmtMoney(v.profit)+"</td><td>"+fmtPct(v.util)+"</td>"; });
+      rowsHtml += "<td>"+fmtMoney(m.fleetProfit)+"</td><td>"+fmtPct(m.fleetUtil)+"</td></tr>";
+    });
+    rowsHtml += "</tbody>";
+    t.innerHTML = rowsHtml;
+  }
+
+  function renderAll(){
+    var hasData = state.vehicles.length > 0;
+    var statusLine = document.getElementById("statusLine");
+    var lastUpdatedEl = document.getElementById("lastUpdated");
+    if (!hasData){
+      statusLine.textContent = "No data loaded — upload CSVs or load sample data";
+      lastUpdatedEl.textContent = "";
+      document.getElementById("kpiGrid").innerHTML = "";
+      document.getElementById("carCards").innerHTML = "";
+      document.getElementById("alertsList").innerHTML = '<div class="empty-alerts">No data yet.</div>';
+      ["chartProfit","chartUtil","chartCost"].forEach(function(id){ document.getElementById(id).innerHTML = ""; });
+      document.getElementById("trendTable").innerHTML = "";
+      return;
+    }
+    statusLine.textContent = state.vehicles.length + " vehicle(s) · " + state.trips.length + " trips logged";
+    if (state.lastUpdated){
+      lastUpdatedEl.textContent = "Updated " + new Date(state.lastUpdated).toLocaleString();
+    }
+    var model = computeModel();
+    renderKPIs(model);
+    renderCards(model);
+    renderCharts(model);
+    renderAlerts(model);
+    renderTable(model);
+  }
+
+  loadFromStorage();
+  renderAll();
+})();
+</script>
