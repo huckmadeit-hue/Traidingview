@@ -117,8 +117,9 @@
   .section-head h2 { font-size: 14px; margin: 0; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); font-weight: 700; }
   .section-head .hint { font-size: 12px; color: var(--ink-3); }
 
-  .kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
-  @media (max-width: 980px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+  .kpi-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+  @media (max-width: 1150px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 640px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
   .kpi-tile {
     background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px;
     padding: 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px;
@@ -234,9 +235,8 @@
 
   <div class="upload-panel" id="uploadPanel">
     <strong style="font-size:13px;">Import your data</strong>
-    <div class="templates">Export each Turo Command Center workbook tab to CSV, or start from blank templates:
+    <div class="templates">Trips: download the "Trip earnings" export directly from Turo (Host tools &gt; Earnings/Trips &gt; Export). Vehicles/Expenses/Charging: fill in these blank templates:
       <a id="tmplVehicles" download="Vehicles.csv">Vehicles.csv</a> ·
-      <a id="tmplTrips" download="Trips.csv">Trips.csv</a> ·
       <a id="tmplExpenses" download="Expenses.csv">Expenses.csv</a> ·
       <a id="tmplCharging" download="Charging.csv">Charging.csv</a>
     </div>
@@ -248,7 +248,7 @@
         <div class="fname" id="fnameVehicles">none</div>
       </div>
       <div class="upload-slot">
-        <label for="fileTrips">Trips.csv</label>
+        <label for="fileTrips">Turo Trip Earnings Export</label>
         <input type="file" id="fileTrips" accept=".csv" />
         <button class="btn" onclick="document.getElementById('fileTrips').click()">Choose file</button>
         <div class="fname" id="fnameTrips">none</div>
@@ -326,9 +326,9 @@
   <footer>
     <strong style="color:var(--ink-2)">Keeping this current</strong>
     <ol>
-      <li>Log every trip, expense, and charging session in the companion <em>Turo_Command_Center.xlsx</em> workbook as it happens.</li>
-      <li>Weekly (or whenever you want a refresh): export each tab as CSV and click <strong>Update Data</strong> above to upload them.</li>
-      <li>This page recalculates everything in your browser and remembers your last upload via local storage — nothing is sent anywhere.</li>
+      <li>Trips: download the trip earnings export directly from Turo whenever you want a refresh — no manual entry needed.</li>
+      <li>Vehicles (one-time setup), Expenses, and Charging: log these in the CSV templates as costs happen — Turo doesn't track them.</li>
+      <li>Click <strong>Update Data</strong> above and upload all four files together. This page recalculates everything in your browser and remembers your last upload via local storage — nothing is sent anywhere.</li>
     </ol>
   </footer>
 </div>
@@ -339,6 +339,7 @@
 
   var STORAGE_KEY = "turoCommandCenterData_v1";
   var FIXED_CATEGORIES = ["Loan/Lease Payment","Insurance","Registration/Tax","Subscription (FSD/Connectivity)"];
+  var USAGE_STATUSES = ["Completed", "In-progress"];
   var VEH_COLORS = ["#1f9e8f", "#7c6fe0"];
   var VEH_COLOR_VARS = ["--veh1", "--veh2"];
   var FLEET_COLOR = "var(--fleet)";
@@ -393,39 +394,85 @@
     });
   }
 
-  function num(v){ var n = parseFloat(String(v).replace(/[$,%]/g, "")); return isNaN(n) ? 0 : n; }
+  function num(v){ var n = parseFloat(String(v).replace(/[$,%\s]/g, "")); return isNaN(n) ? 0 : n; }
   function toDate(v){ if (!v) return null; var d = new Date(v); return isNaN(d.getTime()) ? null : d; }
+  function parseTuroDate(v){
+    if (!v) return null;
+    var m = String(v).trim().match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!m) return toDate(v);
+    var hour = parseInt(m[4], 10) % 12;
+    if (/pm/i.test(m[6])) hour += 12;
+    return new Date(+m[1], +m[2]-1, +m[3], hour, +m[5]);
+  }
   function monthKey(d){ return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"); }
   function daysBetween(a, b){ return Math.round((b - a) / 86400000); }
   function daysInMonth(y, m){ return new Date(y, m+1, 0).getDate(); }
   function fmtMoney(n){ var neg = n < 0; n = Math.abs(n); var s = "$" + n.toLocaleString(undefined,{maximumFractionDigits:0}); return neg ? "-" + s : s; }
   function fmtPct(n){ return (n*100).toFixed(1) + "%"; }
 
+  // ---------- native Turo trip-earnings export format ----------
+  var TRIP_HEADERS = ["Reservation ID","Guest","Vehicle","Vehicle name","Vehicle id","VIN","Trip start","Trip end",
+    "Pickup location","Return location","Trip status","Check-in odometer","Check-out odometer","Distance traveled",
+    "Trip days","Trip price","Boost price","3-day discount","1-week discount","2-week discount","3-week discount",
+    "1-month discount","2-month discount","3-month discount","Non-refundable discount","Early bird discount",
+    "Host promotional credit","Delivery","Excess distance","Extras","Cancellation fee","Additional usage","Late fee",
+    "Improper return fee","Airport operations fee","Airport parking credit","Tolls & tickets","On-trip EV charging",
+    "Post-trip EV charging","Smoking","Cleaning","Fines (paid to host)","Gas reimbursement","Gas fee","Other fees",
+    "Sales tax","Total earnings"];
+  var TRIP_MONEY_HEADERS = TRIP_HEADERS.slice(15); // Trip price .. Total earnings
+
+  function csvField(v){ v = String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; }
+  function tripRow(fields){
+    var obj = {};
+    TRIP_HEADERS.forEach(function(h){ obj[h] = TRIP_MONEY_HEADERS.indexOf(h) > -1 ? "$0.00" : ""; });
+    for (var k in fields) obj[k] = fields[k];
+    return TRIP_HEADERS.map(function(h){ return csvField(obj[h]); }).join(",");
+  }
+  function pad2(n){ return String(n).padStart(2,"0"); }
+  function turoDateStr(y, m, day, hour24, min){
+    var hh = hour24 % 12; if (hh === 0) hh = 12;
+    return y + "-" + pad2(m+1) + "-" + pad2(day) + " " + hh + ":" + pad2(min||0) + " " + (hour24 < 12 ? "AM" : "PM");
+  }
+
   // ---------- sample data ----------
   function sampleCSVs(){
+    var vehicleNames = ["Demo Tesla (NC #DEMO001)", "Demo Tesla (NC #DEMO002)"];
     var vehicles = "Vehicle ID,VIN,In-Service Date,Purchase Price,Financing Type,Monthly Loan/Lease Payment,Loan Balance Remaining,Monthly Insurance Premium,Annual Registration/Tax,Turo Commission Rate (Protection Plan),Current Odometer (mi),Next Maintenance Due (mi),Next Maintenance Due (date),Tire Replacement Due (mi),Insurance Renewal Date,Registration Renewal Date,Status\n" +
-      "Model Y #1 - White,5YJYGDEE1NF000001,2024-03-01,52000,Loan,850,31000,180,420,0.25,28500,35000,2026-09-01,40000,2027-03-01,2027-03-01,Active\n" +
-      "Model Y #2 - Black,5YJYGDEE2NF000002,2024-06-15,54000,Cash,0,0,175,420,0.25,21000,30000,2026-08-15,40000,2027-06-15,2027-06-15,Active\n";
+      vehicleNames[0] + ",5YJYGDEE1NF000001,2024-03-01,52000,Loan,850,31000,180,420,0.25,28500,35000,2026-09-01,40000,2027-03-01,2027-03-01,Active\n" +
+      vehicleNames[1] + ",5YJYGDEE2NF000002,2024-06-15,54000,Cash,0,0,175,420,0.25,21000,30000,2026-08-15,40000,2027-06-15,2027-06-15,Active\n";
     var today = new Date();
-    var trips = "Trip ID,Vehicle,Guest Name,Trip Start Date,Trip End Date,Trip Days,Guest Trip Price ($),Host Net Earnings ($),Turo Fee ($),Miles Driven,Trip Rating (1-5),Month,Notes\n";
+    var tripRows = [TRIP_HEADERS.map(csvField).join(",")];
     var expenses = "Date,Vehicle,Category,Description,Amount ($),Month,Notes\n";
     var charging = "Date,Vehicle,Location Type,kWh Added,Cost ($),Cost per kWh,Odometer at Charge (mi),Month,Notes\n";
-    var tripId = 1000;
+    var resId = 90000000;
     for (var m = 11; m >= 0; m--){
       var d0 = new Date(today.getFullYear(), today.getMonth()-m, 3);
-      ["Model Y #1 - White","Model Y #2 - Black"].forEach(function(veh, vi){
+      vehicleNames.forEach(function(veh, vi){
         var count = 2 + ((m + vi) % 3);
         for (var k = 0; k < count; k++){
-          tripId++;
-          var start = new Date(d0.getFullYear(), d0.getMonth(), 2 + k*6);
+          resId++;
+          var startDay = 2 + k*6;
           var days = 2 + (k % 3);
+          var start = new Date(d0.getFullYear(), d0.getMonth(), startDay, 10, 0);
           var end = new Date(start.getTime() + days*86400000);
           var price = 110 * days + (vi===0 ? 15 : 0);
           var host = Math.round(price * 0.75);
-          var fee = price - host;
           var miles = 40 * days + (k*10);
-          trips += ["TR-"+tripId, veh, "Guest "+tripId, start.toISOString().slice(0,10), end.toISOString().slice(0,10),
-                     days, price, host, fee, miles, 5, monthKey(start), ""].join(",") + "\n";
+          tripRows.push(tripRow({
+            "Reservation ID": String(resId),
+            "Guest": "Demo Guest " + resId,
+            "Vehicle": veh,
+            "Vehicle name": vi===0 ? "Tesla Model Y 2024" : "Tesla Model Y 2023",
+            "Vehicle id": vi===0 ? "9000001" : "9000002",
+            "VIN": vi===0 ? "5YJYGDEE1NF000001" : "5YJYGDEE2NF000002",
+            "Trip start": turoDateStr(start.getFullYear(), start.getMonth(), start.getDate(), 10, 0),
+            "Trip end": turoDateStr(end.getFullYear(), end.getMonth(), end.getDate(), 10, 0),
+            "Trip status": "Completed",
+            "Distance traveled": String(miles),
+            "Trip days": String(days),
+            "Trip price": "$" + price.toFixed(2),
+            "Total earnings": "$" + host.toFixed(2)
+          }));
         }
         var loanAmt = vi===0 ? 850 : 0;
         if (loanAmt) expenses += [new Date(d0.getFullYear(),d0.getMonth(),1).toISOString().slice(0,10), veh, "Loan/Lease Payment", "Monthly payment", loanAmt, monthKey(d0), ""].join(",")+"\n";
@@ -438,7 +485,7 @@
         charging += [new Date(d0.getFullYear(),d0.getMonth(),5).toISOString().slice(0,10), veh, "Supercharger", kwh, cost, +(cost/kwh).toFixed(3), "", monthKey(d0), ""].join(",")+"\n";
       });
     }
-    return { vehicles: vehicles, trips: trips, expenses: expenses, charging: charging };
+    return { vehicles: vehicles, trips: tripRows.join("\n") + "\n", expenses: expenses, charging: charging };
   }
 
   // ---------- state ----------
@@ -467,7 +514,7 @@
   function blankTemplate(name){
     var headers = {
       vehicles: "Vehicle ID,VIN,In-Service Date,Purchase Price,Financing Type,Monthly Loan/Lease Payment,Loan Balance Remaining,Monthly Insurance Premium,Annual Registration/Tax,Turo Commission Rate (Protection Plan),Current Odometer (mi),Next Maintenance Due (mi),Next Maintenance Due (date),Tire Replacement Due (mi),Insurance Renewal Date,Registration Renewal Date,Status\n",
-      trips: "Trip ID,Vehicle,Guest Name,Trip Start Date,Trip End Date,Trip Days,Guest Trip Price ($),Host Net Earnings ($),Turo Fee ($),Miles Driven,Trip Rating (1-5),Month,Notes\n",
+      trips: TRIP_HEADERS.map(csvField).join(",") + "\n",
       expenses: "Date,Vehicle,Category,Description,Amount ($),Month,Notes\n",
       charging: "Date,Vehicle,Location Type,kWh Added,Cost ($),Cost per kWh,Odometer at Charge (mi),Month,Notes\n"
     };
@@ -478,7 +525,6 @@
     document.getElementById(id).href = URL.createObjectURL(blob);
   }
   wireTemplateLink("tmplVehicles", "vehicles");
-  wireTemplateLink("tmplTrips", "trips");
   wireTemplateLink("tmplExpenses", "expenses");
   wireTemplateLink("tmplCharging", "charging");
 
@@ -554,16 +600,20 @@
       var expenses = state.expenses.filter(function(e){ return e["Vehicle"] === name; });
       var charging = state.charging.filter(function(c){ return c["Vehicle"] === name; });
 
+      var earningsTrips = trips.filter(function(t){ return t["Trip status"] !== "Booked"; });
+      var usageTrips = trips.filter(function(t){ return USAGE_STATUSES.indexOf(t["Trip status"]) > -1; });
+      var upcomingTrips = trips.filter(function(t){ return t["Trip status"] === "Booked"; });
+
       var inService = toDate(vRow["In-Service Date"]) || now;
       var daysInService = Math.max(daysBetween(inService, now), 1);
-      var totalTrips = trips.length;
-      var bookedDays = trips.reduce(function(s,t){ return s + num(t["Trip Days"]); }, 0);
+      var totalTrips = usageTrips.length;
+      var bookedDays = usageTrips.reduce(function(s,t){ return s + num(t["Trip days"]); }, 0);
       var utilization = bookedDays / daysInService;
-      var grossGuestRevenue = trips.reduce(function(s,t){ return s + num(t["Guest Trip Price ($)"]); }, 0);
-      var hostNetEarnings = trips.reduce(function(s,t){ return s + num(t["Host Net Earnings ($)"]); }, 0);
-      var turoFees = trips.reduce(function(s,t){ return s + num(t["Turo Fee ($)"]); }, 0);
+      var hostNetEarnings = earningsTrips.reduce(function(s,t){ return s + num(t["Total earnings"]); }, 0);
       var adr = bookedDays ? hostNetEarnings / bookedDays : 0;
-      var totalMiles = trips.reduce(function(s,t){ return s + num(t["Miles Driven"]); }, 0);
+      var totalMiles = usageTrips.reduce(function(s,t){ return s + num(t["Distance traveled"]); }, 0);
+      var upcomingCount = upcomingTrips.length;
+      var upcomingRevenue = upcomingTrips.reduce(function(s,t){ return s + num(t["Total earnings"]); }, 0);
       var chargingCost = charging.reduce(function(s,c){ return s + num(c["Cost ($)"]); }, 0);
       var costPerMile = totalMiles ? chargingCost / totalMiles : 0;
       var fixedCosts = expenses.filter(function(e){ return FIXED_CATEGORIES.indexOf(e["Category"]) > -1; })
@@ -578,8 +628,9 @@
 
       return {
         name: name, vRow: vRow, daysInService: daysInService, totalTrips: totalTrips, bookedDays: bookedDays,
-        utilization: utilization, grossGuestRevenue: grossGuestRevenue, hostNetEarnings: hostNetEarnings,
-        turoFees: turoFees, adr: adr, totalMiles: totalMiles, chargingCost: chargingCost, costPerMile: costPerMile,
+        utilization: utilization, hostNetEarnings: hostNetEarnings,
+        upcomingCount: upcomingCount, upcomingRevenue: upcomingRevenue,
+        adr: adr, totalMiles: totalMiles, chargingCost: chargingCost, costPerMile: costPerMile,
         fixedCosts: fixedCosts, variableCosts: variableCosts, totalCosts: totalCosts, netProfit: netProfit,
         netMargin: netMargin, profitPerDay: profitPerDay, breakEvenUtilization: breakEvenUtilization
       };
@@ -591,9 +642,9 @@
       daysInService: perVehicle.reduce(function(s,v){ return s+v.daysInService; }, 0),
       totalTrips: perVehicle.reduce(function(s,v){ return s+v.totalTrips; }, 0),
       bookedDays: perVehicle.reduce(function(s,v){ return s+v.bookedDays; }, 0),
-      grossGuestRevenue: perVehicle.reduce(function(s,v){ return s+v.grossGuestRevenue; }, 0),
       hostNetEarnings: perVehicle.reduce(function(s,v){ return s+v.hostNetEarnings; }, 0),
-      turoFees: perVehicle.reduce(function(s,v){ return s+v.turoFees; }, 0),
+      upcomingCount: perVehicle.reduce(function(s,v){ return s+v.upcomingCount; }, 0),
+      upcomingRevenue: perVehicle.reduce(function(s,v){ return s+v.upcomingRevenue; }, 0),
       totalMiles: perVehicle.reduce(function(s,v){ return s+v.totalMiles; }, 0),
       chargingCost: perVehicle.reduce(function(s,v){ return s+v.chargingCost; }, 0),
       fixedCosts: perVehicle.reduce(function(s,v){ return s+v.fixedCosts; }, 0),
@@ -614,12 +665,16 @@
     }
     months.forEach(function(mo){
       mo.perVehicle = vehicles.map(function(name){
-        var trips = state.trips.filter(function(t){ return t["Vehicle"] === name && (t["Month"] === mo.key || monthKey(toDate(t["Trip Start Date"])||now) === mo.key); });
+        var monthTrips = state.trips.filter(function(t){
+          return t["Vehicle"] === name && monthKey(parseTuroDate(t["Trip start"])||now) === mo.key;
+        });
         var expenses = state.expenses.filter(function(e){ return e["Vehicle"] === name && (e["Month"] === mo.key || monthKey(toDate(e["Date"])||now) === mo.key); });
         var charging = state.charging.filter(function(c){ return c["Vehicle"] === name && (c["Month"] === mo.key || monthKey(toDate(c["Date"])||now) === mo.key); });
-        var earnings = trips.reduce(function(s,t){ return s + num(t["Host Net Earnings ($)"]); }, 0);
+        var earnings = monthTrips.filter(function(t){ return t["Trip status"] !== "Booked"; })
+                                  .reduce(function(s,t){ return s + num(t["Total earnings"]); }, 0);
         var costs = expenses.reduce(function(s,e){ return s + num(e["Amount ($)"]); }, 0) + charging.reduce(function(s,c){ return s + num(c["Cost ($)"]); }, 0);
-        var bookedDays = trips.reduce(function(s,t){ return s + num(t["Trip Days"]); }, 0);
+        var bookedDays = monthTrips.filter(function(t){ return USAGE_STATUSES.indexOf(t["Trip status"]) > -1; })
+                                    .reduce(function(s,t){ return s + num(t["Trip days"]); }, 0);
         var util = bookedDays / daysInMonth(mo.date.getFullYear(), mo.date.getMonth());
         return { name: name, earnings: earnings, costs: costs, profit: earnings-costs, util: util };
       });
@@ -683,7 +738,8 @@
       { label: "Net Profit", value: fmtMoney(f.netProfit), neg: f.netProfit < 0, delta: last && prev ? deltaHTML(last.fleetProfit, prev.fleetProfit, false) : "" },
       { label: "Net Margin", value: fmtPct(f.netMargin), neg: f.netMargin < 0 },
       { label: "Fleet Utilization", value: fmtPct(f.utilization), delta: last && prev ? deltaHTML(last.fleetUtil, prev.fleetUtil, true) : "" },
-      { label: "Total Trips", value: String(f.totalTrips) }
+      { label: "Completed Trips", value: String(f.totalTrips) },
+      { label: "Upcoming Bookings", value: String(f.upcomingCount), delta: f.upcomingCount ? '<span class="delta">' + fmtMoney(f.upcomingRevenue) + ' committed</span>' : "" }
     ];
     grid.innerHTML = tiles.map(function(t){
       return '<div class="kpi-tile"><span class="label">' + t.label + '</span>' +
