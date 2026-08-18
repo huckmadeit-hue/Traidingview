@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- RSRV brand rule: at favicon scale the mark reduces to the accent dot on the ink field -->
+  <rect width="64" height="64" fill="#201E1D"/>
+  <rect x="24" y="24" width="16" height="16" fill="#EC3013"/>
+</svg>

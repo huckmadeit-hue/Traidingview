@@ -1,0 +1,6 @@
+# Reserve EV — robots
+# TODO: confirm production domain before launch
+User-agent: *
+Allow: /
+
+Sitemap: https://rsrvev.com/sitemap.xml
