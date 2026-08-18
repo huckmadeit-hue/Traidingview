@@ -184,7 +184,7 @@
       );
     }
     return (
-      '<a class="btn btn-ghost" href="contact.html" data-placeholder ' +
+      '<a class="btn btn-ghost" href="contact.html?v=' + esc(v.id) + '" data-placeholder ' +
       'title="Add this vehicle\'s Turo listing URL in assets/js/fleet-data.js">' +
       "Turo listing coming soon &middot; Ask Reserve EV</a>"
     );

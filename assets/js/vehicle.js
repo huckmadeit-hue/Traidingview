@@ -7,7 +7,22 @@
   if (!R || !mount) return;
 
   var params = new URLSearchParams(location.search);
-  var v = R.byId(params.get("v")) || R.fleet[0];
+  var requested = params.get("v");
+  var v = R.byId(requested);
+  if (!v && requested) {
+    document.title = "Vehicle Not Found | Reserve EV Fleet";
+    mount.innerHTML =
+      '<section class="page-hero" data-cta-sentinel><div class="wrap">' +
+      '<span class="kicker">Reserve EV fleet</span>' +
+      "<h1>We couldn&rsquo;t find that vehicle.</h1>" +
+      '<p class="lede">The link may be out of date — the fleet is five vehicles and they&rsquo;re all one click away.</p>' +
+      '<div class="hero-ctas">' +
+      '<a class="btn btn-primary" href="fleet.html">Explore the Fleet <span class="arrow" aria-hidden="true">&rarr;</span></a>' +
+      '<a class="btn btn-ghost" href="contact.html">Ask Reserve EV</a>' +
+      "</div></div></section>";
+    return;
+  }
+  v = v || R.fleet[0];
   if (!v) return;
 
   document.title = v.name + " | Reserve EV Fleet | Tesla Rental Raleigh–Durham";

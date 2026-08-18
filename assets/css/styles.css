@@ -521,6 +521,23 @@ section.tight {
   border-right-width: 3px;
 }
 
+/* hero "fleet pass" annotation strip (Concept A) */
+.pass-strip {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.75rem 30px 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--n-600);
+  max-width: none;
+}
+.pass-strip .pass-accent {
+  color: var(--accent-700);
+}
+
 /* editorial photo placeholder — brand hatch pattern */
 .photo-slot {
   position: relative;

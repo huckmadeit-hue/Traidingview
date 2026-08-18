@@ -21,6 +21,10 @@
     any.value = "help-me-choose";
     any.textContent = "Not sure — help me choose";
     vSel.appendChild(any);
+
+    /* preselect when arriving from a vehicle page (?v=<id>) */
+    var pre = new URLSearchParams(location.search).get("v");
+    if (pre && R.byId(pre)) vSel.value = pre;
   }
 
   var status = document.getElementById("form-status");
